@@ -1,0 +1,64 @@
+# Reusable workflow for building and testing Go projects
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Go Build and Test
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: 'Go version to use'
+        required: false
+        type: string
+        default: '1.24'
+      postgres-version:
+        description: 'PostgreSQL version to use'
+        required: false
+        type: string
+        default: '15'
+      run-tests:
+        description: 'Whether to run tests'
+        required: false
+        type: boolean
+        default: true
+      postgres-dsn:
+        description: 'PostgreSQL DSN for tests'
+        required: false
+        type: string
+        default: 'host=localhost user=postgres password=postgres dbname=postgres port=5432 sslmode=disable'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:${{ inputs.postgres-version }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Validate Dependencies
+      run: |
+        go mod tidy
+        go mod verify
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      if: ${{ inputs.run-tests }}
+      env:
+        POSTGRES_DSN: ${{ inputs.postgres-dsn }}
+      run: go test -v ./...

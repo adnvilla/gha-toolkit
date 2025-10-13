@@ -1,0 +1,23 @@
+# Node modules (from semantic-release if run locally)
+node_modules/
+package-lock.json
+package.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak
