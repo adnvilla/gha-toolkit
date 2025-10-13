@@ -1,3 +1,9 @@
+## 1.0.0 (2025-10-13)
+
+### 🚀 Features
+
+* add initial implementation of reusable workflows toolkit ([#1](https://github.com/adnvilla/gha-toolkit/issues/1)) ([d8ba90d](https://github.com/adnvilla/gha-toolkit/commit/d8ba90d463bbb3bef06b9d1a21516ab9009dc81e))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
