@@ -42,23 +42,23 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ inputs.go-version }}
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ inputs.go-version }}
 
-    - name: Validate Dependencies
-      run: |
-        go mod tidy
-        go mod verify
+      - name: Validate Dependencies
+        run: |
+          go mod tidy
+          go mod verify
 
-    - name: Build
-      run: go build -v ./...
+      - name: Build
+        run: go build -v ./...
 
-    - name: Test
-      if: ${{ inputs.run-tests }}
-      env:
-        POSTGRES_DSN: ${{ inputs.postgres-dsn }}
-      run: go test -v ./...
+      - name: Test
+        if: ${{ inputs.run-tests }}
+        env:
+          POSTGRES_DSN: ${{ inputs.postgres-dsn }}
+        run: go test -v ./...
