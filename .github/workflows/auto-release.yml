@@ -1,5 +1,5 @@
-# Release workflow para gha-toolkit
-# Genera releases automáticas usando semantic-release cuando CI pasa
+# Release workflow for gha-toolkit
+# Generates automatic releases using semantic-release when CI passes
 
 name: Release
 

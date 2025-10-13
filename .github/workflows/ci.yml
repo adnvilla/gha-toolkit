@@ -1,5 +1,5 @@
-# CI workflow para gha-toolkit
-# Este workflow valida la sintaxis de los workflows y genera releases automáticas
+# CI workflow for gha-toolkit
+# This workflow validates workflow syntax and generates automatic releases
 
 name: CI
 
@@ -38,7 +38,7 @@ jobs:
           config_file: .markdownlint.json
           ignore_files: node_modules/
 
-  # Este job siempre pasa, es solo para tener un estado consolidado
+  # This job always passes, it's just to have a consolidated status
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
