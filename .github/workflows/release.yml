@@ -1,0 +1,55 @@
+# Reusable workflow for semantic versioning releases
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Semantic Release
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version for semantic-release'
+        required: false
+        type: string
+        default: '20'
+      dry-run:
+        description: 'Run semantic-release in dry-run mode'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      github-token:
+        description: 'GitHub token for creating releases'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install semantic-release
+        run: |
+          npm install -g semantic-release @semantic-release/git \
+            @semantic-release/changelog @semantic-release/exec \
+            conventional-changelog-conventionalcommits
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ inputs.dry-run }}" == "true" ]; then
+            npx semantic-release --dry-run
+          else
+            npx semantic-release
+          fi

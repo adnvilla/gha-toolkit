@@ -1,0 +1,34 @@
+# Test workflow to validate that reusable workflows work correctly
+# This workflow only runs manually (workflow_dispatch)
+
+name: Test Workflows
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-workflow:
+        description: 'Which workflow to test'
+        required: true
+        type: choice
+        options:
+          - go
+          - release
+          - both
+
+jobs:
+  test-go-workflow:
+    if: ${{ github.event.inputs.test-workflow == 'go' || github.event.inputs.test-workflow == 'both' }}
+    uses: ./.github/workflows/go.yml
+    with:
+      go-version: '1.24'
+      run-tests: false  # This repo doesn't have Go code
+
+  test-release-workflow:
+    if: ${{ github.event.inputs.test-workflow == 'release' || github.event.inputs.test-workflow == 'both' }}
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      dry-run: true  # Always in dry-run for this repo
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
