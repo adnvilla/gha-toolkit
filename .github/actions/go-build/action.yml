@@ -1,0 +1,16 @@
+# Composite action for building Go projects
+name: 'Build Go Project'
+description: 'Builds a Go project with configurable flags'
+
+inputs:
+  build-flags:
+    description: 'Additional flags for go build'
+    required: false
+    default: '-v'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build
+      shell: bash
+      run: go build ${{ inputs.build-flags }} ./...

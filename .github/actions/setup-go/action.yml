@@ -1,0 +1,23 @@
+# Composite action for setting up Go environment
+name: 'Setup Go Environment'
+description: 'Sets up Go and validates dependencies'
+
+inputs:
+  go-version:
+    description: 'Go version to use'
+    required: false
+    default: '1.24'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Validate Dependencies
+      shell: bash
+      run: |
+        go mod tidy
+        go mod verify
