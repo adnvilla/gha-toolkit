@@ -34,18 +34,19 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Go Environment
-        uses: ./.github/actions/setup-go
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ inputs.go-version }}
 
+      - name: Validate Dependencies
+        run: |
+          go mod tidy
+          go mod verify
+
       - name: Build
-        uses: ./.github/actions/go-build
-        with:
-          build-flags: ${{ inputs.build-flags }}
+        run: go build ${{ inputs.build-flags }} ./...
 
       - name: Test
         if: ${{ inputs.run-tests }}
-        uses: ./.github/actions/go-test
-        with:
-          test-flags: ${{ inputs.test-flags }}
+        run: go test ${{ inputs.test-flags }} ./...
