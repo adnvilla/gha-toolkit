@@ -22,6 +22,16 @@ on:
         required: false
         type: boolean
         default: true
+      test-flags:
+        description: 'Additional flags for go test'
+        required: false
+        type: string
+        default: '-v'
+      build-flags:
+        description: 'Additional flags for go build'
+        required: false
+        type: string
+        default: '-v'
       postgres-dsn:
         description: 'PostgreSQL DSN for tests'
         required: false
@@ -45,19 +55,21 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Go Environment
-        uses: ./.github/actions/setup-go
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ inputs.go-version }}
 
+      - name: Validate Dependencies
+        run: |
+          go mod tidy
+          go mod verify
+
       - name: Build
-        uses: ./.github/actions/go-build
-        with:
-          build-flags: '-v'
+        run: go build ${{ inputs.build-flags }} ./...
 
       - name: Test
         if: ${{ inputs.run-tests }}
-        uses: ./.github/actions/go-test
-        with:
-          test-flags: '-v'
-          postgres-dsn: ${{ inputs.postgres-dsn }}
+        env:
+          POSTGRES_DSN: ${{ inputs.postgres-dsn }}
+        run: go test ${{ inputs.test-flags }} ./...
