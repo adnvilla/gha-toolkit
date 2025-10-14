@@ -1,0 +1,51 @@
+# Reusable workflow for building and testing Go projects (base)
+# For libraries and projects that don't require external services
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Go Build and Test (Base)
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: 'Go version to use'
+        required: false
+        type: string
+        default: '1.24'
+      run-tests:
+        description: 'Whether to run tests'
+        required: false
+        type: boolean
+        default: true
+      test-flags:
+        description: 'Additional flags for go test'
+        required: false
+        type: string
+        default: '-v'
+      build-flags:
+        description: 'Additional flags for go build'
+        required: false
+        type: string
+        default: '-v'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Build
+        uses: ./.github/actions/go-build
+        with:
+          build-flags: ${{ inputs.build-flags }}
+
+      - name: Test
+        if: ${{ inputs.run-tests }}
+        uses: ./.github/actions/go-test
+        with:
+          test-flags: ${{ inputs.test-flags }}
