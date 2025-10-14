@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/adnvilla/gha-toolkit/compare/v1.0.0...v1.1.0) (2025-10-14)
+
+### 🚀 Features
+
+* add composite actions for building, testing, and setting up Go environment ([#2](https://github.com/adnvilla/gha-toolkit/issues/2)) ([dcd1504](https://github.com/adnvilla/gha-toolkit/commit/dcd15048593977a5f898ef127fb24ae82dd78efd))
+
 ## 1.0.0 (2025-10-13)
 
 ### 🚀 Features
