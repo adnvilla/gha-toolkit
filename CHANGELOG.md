@@ -1,3 +1,9 @@
+## [1.1.1](https://github.com/adnvilla/gha-toolkit/compare/v1.1.0...v1.1.1) (2025-10-14)
+
+### ♻️ Code Refactoring
+
+* remove composite actions for Go build, test, and setup; integrate directly into workflows ([#3](https://github.com/adnvilla/gha-toolkit/issues/3)) ([b668582](https://github.com/adnvilla/gha-toolkit/commit/b6685820fe7d342dda2e3f1675f4bcd723017652))
+
 ## [1.1.0](https://github.com/adnvilla/gha-toolkit/compare/v1.0.0...v1.1.0) (2025-10-14)
 
 ### 🚀 Features
