@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/adnvilla/gha-toolkit/compare/v1.3.0...v1.3.1) (2026-07-19)
+
+### 🐛 Bug Fixes
+
+* extend validate-doc-pins guard to cover ENVIRONMENTS.md ([cc5a741](https://github.com/adnvilla/gha-toolkit/commit/cc5a741caeb803398ff4bc6bf409c242c31d8654)), closes [#7](https://github.com/adnvilla/gha-toolkit/issues/7)
+
 ## [1.3.0](https://github.com/adnvilla/gha-toolkit/compare/v1.2.1...v1.3.0) (2026-07-19)
 
 ### 🚀 Features
