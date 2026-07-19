@@ -542,7 +542,10 @@ npx semantic-release --dry-run
 
 `test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`,
 `docker-build-push.yml` (build-only) and `k8s-deploy.yml` (`helm template` dry-run) against this repo
-without needing real Go/Node projects, a registry, or a cluster.
+without needing real Go/Node projects, a registry, or a cluster. The docker and k8s smoke jobs pass an
+explicit `ref: ${{ github.sha }}`; docker has a follow-up job asserting `outputs.short-sha` matches
+that ref. `adopt-existing` is **not** covered by `test.yml` — it is skipped under `dry-run` and needs
+a disposable cluster/namespace for a real run (validate manually when changing it).
 
 ### Integration Testing
 

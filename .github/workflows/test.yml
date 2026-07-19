@@ -1,5 +1,12 @@
 # Test workflow to validate that reusable workflows work correctly
 # This workflow only runs manually (workflow_dispatch)
+#
+# Coverage notes:
+# - `ref` is exercised on docker-build-push and k8s-deploy (explicit github.sha),
+#   with a follow-up job asserting docker's short-sha output matches that ref.
+# - `adopt-existing` is NOT smoke-tested here: k8s-deploy skips it when
+#   dry-run is true, and a real run needs a disposable cluster/namespace.
+#   Validate that path manually against an isolated namespace when changing it.
 
 name: Test Workflows
 
@@ -19,11 +26,11 @@ on:
         type: boolean
         default: false
       run-docker-build-push:
-        description: 'Test docker-build-push.yml against a fixture Dockerfile (build only, no push)'
+        description: 'Test docker-build-push.yml against a fixture Dockerfile (build only, no push; exercises ref)'
         type: boolean
         default: false
       run-k8s-deploy:
-        description: 'Test k8s-deploy.yml (client-side dry-run, no cluster required)'
+        description: 'Test k8s-deploy.yml (helm template dry-run + ref; no cluster; adopt-existing not covered)'
         type: boolean
         default: false
 
@@ -59,17 +66,41 @@ jobs:
     if: ${{ github.event.inputs.run-docker-build-push == 'true' }}
     uses: ./.github/workflows/docker-build-push.yml
     with:
+      # Explicit ref: smoke-test that checkout honors inputs.ref (the workflow_run
+      # head_sha path from #4) instead of silently using the run's default SHA.
+      ref: ${{ github.sha }}
       dockerfile: .github/test-fixtures/Dockerfile
       context: .github/test-fixtures
       image-name: gha-toolkit-smoke-test
       registry-host: registry.example.local:5000
       push: false
 
+  verify-docker-build-push-ref:
+    needs: test-docker-build-push-workflow
+    if: ${{ github.event.inputs.run-docker-build-push == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Confirm short-sha matches the explicit ref
+        env:
+          ACTUAL: ${{ needs.test-docker-build-push-workflow.outputs.short-sha }}
+        run: |
+          EXPECTED="$(git rev-parse --short=7 HEAD)"
+          echo "expected=${EXPECTED} actual=${ACTUAL}"
+          if [ "${ACTUAL}" != "${EXPECTED}" ]; then
+            echo "::error::docker-build-push short-sha (${ACTUAL}) != ref short-sha (${EXPECTED})"
+            exit 1
+          fi
+
   test-k8s-deploy-workflow:
     if: ${{ github.event.inputs.run-k8s-deploy == 'true' }}
     uses: ./.github/workflows/k8s-deploy.yml
     with:
       toolkit-ref: ${{ github.ref_name }}
+      # Explicit ref: exercises values-file checkout at the caller-supplied SHA.
+      ref: ${{ github.sha }}
       release-name: smoke-test
       namespace: smoke-test
       kube-context: unused-in-dry-run
@@ -77,3 +108,5 @@ jobs:
       image: registry.example.local:5000/smoke-test:latest
       dry-run: true
       environment: 'test'
+      # adopt-existing intentionally omitted — skipped under dry-run and needs a
+      # real cluster when enabled; see file header.
