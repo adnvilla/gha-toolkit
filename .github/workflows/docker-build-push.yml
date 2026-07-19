@@ -1,6 +1,7 @@
-# Reusable workflow to build a Docker image and push it to a registry
-# Works with GitHub-hosted runners against public registries, or with
-# self-hosted runners against a private/local insecure registry.
+# Reusable workflow to build a Docker image and push it to a registry.
+# Supports ghcr.io (auto-login via github.token), any registry with optional
+# registry-username/registry-password secrets, or a local insecure registry
+# (no login). Callers pushing to ghcr.io need permissions: packages: write.
 # For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
 
 name: Docker Build and Push
@@ -31,7 +32,9 @@ on:
         required: true
         type: string
       registry-host:
-        description: 'Registry host, e.g. ghcr.io/org or registry.example.local:5001'
+        description: >-
+          Registry host (and optional org path), e.g. ghcr.io/org,
+          docker.io/org, or registry.example.local:5001
         required: true
         type: string
       extra-tags:
@@ -61,6 +64,19 @@ on:
         required: false
         type: string
         default: 'ubuntu-latest'
+    secrets:
+      registry-username:
+        description: >-
+          Username for docker login (Docker Hub or any non-ghcr registry).
+          When set together with registry-password, takes precedence over
+          the automatic ghcr.io login.
+        required: false
+      registry-password:
+        description: >-
+          Password or token for docker login (e.g. Docker Hub access token,
+          or a PAT for a private registry). Required when registry-username
+          is set.
+        required: false
     outputs:
       image:
         description: 'Full image reference (registry-host/image-name:short-sha)'
@@ -104,6 +120,31 @@ jobs:
             echo "::error::Docker daemon cannot reach ${REGISTRY_HOST}."
             echo "$ERR"
             exit 1
+          fi
+
+      # Login only when pushing. Explicit secrets win; otherwise auto-login to
+      # ghcr.io via github.token. Local/insecure registries skip login.
+      - name: Log in to container registry
+        if: ${{ inputs.push }}
+        env:
+          REGISTRY_HOST: ${{ inputs.registry-host }}
+          REGISTRY_USERNAME: ${{ secrets.registry-username }}
+          REGISTRY_PASSWORD: ${{ secrets.registry-password }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          # registry-host may be "ghcr.io/org" — login against the host only.
+          LOGIN_SERVER="${REGISTRY_HOST%%/*}"
+
+          if [ -n "${REGISTRY_USERNAME}" ] && [ -n "${REGISTRY_PASSWORD}" ]; then
+            echo "${REGISTRY_PASSWORD}" | docker login "${LOGIN_SERVER}" \
+              -u "${REGISTRY_USERNAME}" --password-stdin
+          elif [ "${LOGIN_SERVER}" = "ghcr.io" ]; then
+            echo "${GHCR_TOKEN}" | docker login ghcr.io \
+              -u "${GHCR_USER}" --password-stdin
+          else
+            echo "No registry credentials provided; skipping docker login"
+            echo "(OK for local/insecure registries that need no auth)"
           fi
 
       - name: Build image

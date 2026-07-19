@@ -130,7 +130,11 @@ Builds a Docker image and pushes it to a registry (public or a private/local ins
 it with the short commit SHA plus any extra tags. Outputs `image` so a following job can consume the
 exact ref that was built.
 
-**Usage**:
+**Auth:** `ghcr.io/...` auto-logs in with `github.token` (set `permissions: packages: write`). For
+Docker Hub or other registries, pass `secrets: registry-username` / `registry-password`. Local
+insecure registries need neither.
+
+**Usage** (local/insecure registry):
 
 ```yaml
 jobs:
@@ -142,6 +146,21 @@ jobs:
       registry-host: registry.example.local:5001
       verify-insecure-registry: true   # For local/self-hosted registries
       runs-on: self-hosted
+```
+
+**Usage** (GitHub Container Registry):
+
+```yaml
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    with:
+      dockerfile: apps/web/Dockerfile
+      image-name: my-app
+      registry-host: ghcr.io/my-org
 ```
 
 ### 5. Kubernetes Deploy (`k8s-deploy.yml`)
