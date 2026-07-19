@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/adnvilla/gha-toolkit/compare/v1.2.1...v1.3.0) (2026-07-19)
+
+### 🚀 Features
+
+* add GitHub Environment support to k8s-deploy.yml (staging/production) ([70e840e](https://github.com/adnvilla/gha-toolkit/commit/70e840e2156ce6061ac95989cae3ef8fefa48559))
+
 ## [1.2.1](https://github.com/adnvilla/gha-toolkit/compare/v1.2.0...v1.2.1) (2026-07-19)
 
 ### 🐛 Bug Fixes
