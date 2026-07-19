@@ -104,7 +104,7 @@ on:
 1. **semantic-release:**
    - Checks out repository with full history (`fetch-depth: 0`)
    - Sets up Node.js environment
-   - Installs semantic-release and plugins
+   - Installs pinned semantic-release majors (+ changelog/git plugins) via `npm install -g`
    - Analyzes commits to determine version
    - Creates tags and GitHub releases
 
@@ -113,16 +113,19 @@ on:
 - Uses semantic-release plugins for automation
 - Supports dry-run for testing
 - Requires explicit token passing (security)
+- Pins package majors in the install step so a breaking upstream release cannot silently
+  break every consumer; bump the pins deliberately when adopting a new major
 
-**Dependencies:**
-```json
-{
-  "semantic-release": "^19.0.0",
-  "@semantic-release/commit-analyzer": "^9.0.0",
-  "@semantic-release/release-notes-generator": "^10.0.0",
-  "@semantic-release/github": "^8.0.0"
-}
+**Dependencies** (installed ad hoc by the workflow, no committed `package.json`):
+```text
+semantic-release@^25
+@semantic-release/git@^10
+@semantic-release/changelog@^6
+conventional-changelog-conventionalcommits@^10
 ```
+
+(`@semantic-release/commit-analyzer`, `release-notes-generator`, and `github` ship with
+`semantic-release`. `@semantic-release/exec` is not installed — unused by `.releaserc.json`.)
 
 **Usage Pattern:**
 ```yaml
