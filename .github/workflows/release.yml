@@ -45,9 +45,15 @@ jobs:
 
       - name: Install semantic-release
         run: |
-          npm install -g semantic-release @semantic-release/git \
-            @semantic-release/changelog @semantic-release/exec \
-            conventional-changelog-conventionalcommits
+          # Pin majors so a breaking upstream release cannot silently break
+          # every consumer's release pipeline. Bump deliberately when ready.
+          # @semantic-release/exec is intentionally omitted — not used by
+          # .releaserc.json (or the consumer .releaserc.json.example).
+          npm install -g \
+            semantic-release@^25 \
+            @semantic-release/git@^10 \
+            @semantic-release/changelog@^6 \
+            conventional-changelog-conventionalcommits@^10
 
       - name: Release
         env:
