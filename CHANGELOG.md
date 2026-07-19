@@ -1,3 +1,9 @@
+## [1.3.4](https://github.com/adnvilla/gha-toolkit/compare/v1.3.3...v1.3.4) (2026-07-19)
+
+### 📚 Documentation
+
+* add go-base.yml to README Available Workflows ([fbdbdfc](https://github.com/adnvilla/gha-toolkit/commit/fbdbdfc40b85e3ebc3e65aaa90f733182ecef7a2)), closes [#10](https://github.com/adnvilla/gha-toolkit/issues/10)
+
 ## [1.3.3](https://github.com/adnvilla/gha-toolkit/compare/v1.3.2...v1.3.3) (2026-07-19)
 
 ### 🐛 Bug Fixes
