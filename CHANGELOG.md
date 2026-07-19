@@ -1,3 +1,9 @@
+## [1.3.5](https://github.com/adnvilla/gha-toolkit/compare/v1.3.4...v1.3.5) (2026-07-19)
+
+### 🐛 Bug Fixes
+
+* call release.yml from auto-release instead of duplicating it ([a738565](https://github.com/adnvilla/gha-toolkit/commit/a738565dd5e7f65c9ee5fd356e8cd0c39d6ec65a)), closes [#9](https://github.com/adnvilla/gha-toolkit/issues/9)
+
 ## [1.3.4](https://github.com/adnvilla/gha-toolkit/compare/v1.3.3...v1.3.4) (2026-07-19)
 
 ### 📚 Documentation
