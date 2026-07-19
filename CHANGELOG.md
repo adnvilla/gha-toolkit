@@ -1,3 +1,9 @@
+## [1.3.2](https://github.com/adnvilla/gha-toolkit/compare/v1.3.1...v1.3.2) (2026-07-19)
+
+### 🐛 Bug Fixes
+
+* make k8s-deploy dry-run genuinely offline with helm template ([07d0e5a](https://github.com/adnvilla/gha-toolkit/commit/07d0e5a7f0ad7b33aa49bcbf614e8104c639c091)), closes [#16](https://github.com/adnvilla/gha-toolkit/issues/16)
+
 ## [1.3.1](https://github.com/adnvilla/gha-toolkit/compare/v1.3.0...v1.3.1) (2026-07-19)
 
 ### 🐛 Bug Fixes
