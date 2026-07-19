@@ -220,33 +220,45 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 Conventional Commit → Commit Analyzer → Version Calculator → Tag Creator → Release Publisher
 ```
 
-**Commit Types → Version Impact:**
+**Commit Types → Version Impact** (per the `commit-analyzer` `releaseRules` in `.releaserc.json`):
 
 | Type | Example | Version Change |
 |------|---------|----------------|
-| `fix:` | `fix: correct validation` | 1.0.0 → 1.0.1 (PATCH) |
 | `feat:` | `feat: add new input` | 1.0.0 → 1.1.0 (MINOR) |
+| `fix:` | `fix: correct validation` | 1.0.0 → 1.0.1 (PATCH) |
+| `perf:` | `perf: reduce checkout time` | 1.0.0 → 1.0.1 (PATCH) |
+| `revert:` | `revert: revert previous change` | 1.0.0 → 1.0.1 (PATCH) |
+| `docs:` | `docs: clarify usage example` | 1.0.0 → 1.0.1 (PATCH) |
+| `refactor:` | `refactor: simplify job steps` | 1.0.0 → 1.0.1 (PATCH) |
 | `feat!:` | `feat!: change API` | 1.0.0 → 2.0.0 (MAJOR) |
 | `BREAKING CHANGE:` | In commit body | 1.0.0 → 2.0.0 (MAJOR) |
-| `docs:`, `chore:` | Documentation/maintenance | No release |
+| `chore:`, `test:`, `build:`, `ci:` | Maintenance/CI-only | No release |
 
 ### Configuration (.releaserc.json)
+
+This repository's own `.releaserc.json` (used by `auto-release.yml`):
 
 ```json
 {
   "branches": ["master"],
   "plugins": [
-    "@semantic-release/commit-analyzer",
-    "@semantic-release/release-notes-generator",
-    "@semantic-release/github"
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits", "releaseRules": ["..."] }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits", "presetConfig": { "...": "..." } }],
+    "@semantic-release/changelog",
+    ["@semantic-release/git", { "assets": ["CHANGELOG.md"], "message": "chore(release): ..." }],
+    ["@semantic-release/github", { "successComment": false, "failComment": false, "releasedLabels": false }]
   ]
 }
 ```
 
+See the actual `.releaserc.json` for the full `releaseRules` and `presetConfig`; `.releaserc.json.example` shows the equivalent config consumers should copy into their own projects.
+
 **Plugin Roles:**
-- **commit-analyzer**: Determines if release is needed and version type
-- **release-notes-generator**: Creates changelog from commits
-- **github**: Publishes releases on GitHub
+- **commit-analyzer**: Determines if a release is needed and the version bump, per the custom `releaseRules` (see the table above)
+- **release-notes-generator**: Creates changelog notes from commits, grouped into sections via `presetConfig`
+- **changelog**: Writes/updates `CHANGELOG.md`
+- **git**: Commits `CHANGELOG.md` back to the repo as `chore(release): <version> [skip ci]`
+- **github**: Publishes the GitHub release and tag
 
 ## Extensibility
 

@@ -135,10 +135,12 @@ See `.releaserc.json.example` for complete configuration.
 
 Automatic versioning works with commits in this format:
 
-- `feat: new feature` → minor version (1.0.0 → 1.1.0)
-- `fix: bug fix` → patch version (1.0.0 → 1.0.1)
-- `feat!: breaking change` → major version (1.0.0 → 2.0.0)
-- `docs:`, `chore:`, etc. → no release
+- `feat:` → minor version (1.0.0 → 1.1.0)
+- `fix:`, `perf:`, `revert:`, `docs:`, `refactor:` → patch version (1.0.0 → 1.0.1)
+- `feat!:` or a `BREAKING CHANGE:` footer → major version (1.0.0 → 2.0.0)
+- `chore:`, `test:`, `build:`, `ci:` → no release
+
+See the `commit-analyzer` `releaseRules` in `.releaserc.json` for the authoritative mapping.
 
 ## 🚀 Getting Started
 
