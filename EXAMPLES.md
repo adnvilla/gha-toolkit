@@ -321,6 +321,46 @@ run against it will fail (Helm refuses to adopt resources it doesn't own). Add `
 to the `deploy` job for that one run only, then remove it — see "Migrating an existing deployment" in
 `charts/app/README.md` for the full runbook and why it must not stay on permanently.
 
+## Example 9: Push to GitHub Container Registry (ghcr.io)
+
+`docker-build-push.yml` auto-logs in to `ghcr.io` with `github.token` when `registry-host` starts
+with `ghcr.io` — no `secrets:` block needed. The caller must grant `packages: write`.
+
+```yaml
+# .github/workflows/publish-image.yml
+name: Publish Image
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    with:
+      dockerfile: Dockerfile
+      image-name: my-app
+      registry-host: ghcr.io/my-org
+```
+
+For Docker Hub (or any other registry), pass credentials explicitly:
+
+```yaml
+jobs:
+  build:
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    with:
+      dockerfile: Dockerfile
+      image-name: my-app
+      registry-host: docker.io/my-org
+    secrets:
+      registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+      registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+```
+
 ## Important Notes
 
 ### Permissions
@@ -329,16 +369,20 @@ Make sure the calling workflow has the necessary permissions:
 
 ```yaml
 permissions:
-  contents: write  # For semantic-release
+  contents: write   # For semantic-release
+  packages: write   # For docker-build-push.yml → ghcr.io
 ```
 
 ### Secrets
 
-Secrets must be passed explicitly:
+Secrets must be passed explicitly when required by the reusable workflow:
 
 ```yaml
 secrets:
-  github-token: ${{ secrets.GITHUB_TOKEN }}
+  github-token: ${{ secrets.GITHUB_TOKEN }}   # release.yml
+  # docker-build-push.yml — only for non-ghcr registries:
+  # registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+  # registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 ```
 
 ### Semantic Release Configuration

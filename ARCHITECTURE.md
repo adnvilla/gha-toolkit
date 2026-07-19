@@ -185,7 +185,8 @@ on:
 
 **Inputs:**
 - `dockerfile` (string, required), `context` (string, default `.`)
-- `image-name` (string, required), `registry-host` (string, required)
+- `image-name` (string, required), `registry-host` (string, required) — host plus optional org path,
+  e.g. `ghcr.io/org`, `docker.io/org`, or `registry.example.local:5001`
 - `extra-tags` (string, one tag per line, default `latest`)
 - `build-args` (string, one `KEY=VALUE` per line)
 - `verify-insecure-registry` (boolean): Preflight-checks the Docker daemon can reach the registry
@@ -193,6 +194,14 @@ on:
 - `push` (boolean): Set to false to only validate that the image builds, without publishing
   (default: true)
 - `runs-on` (string, default `ubuntu-latest`)
+
+**Secrets (optional):**
+- `registry-username` / `registry-password`: `docker login` credentials for Docker Hub or any
+  non-ghcr registry. When both are set they take precedence over the automatic ghcr.io login.
+- **ghcr.io auto-login:** if `registry-host` starts with `ghcr.io` and no explicit secrets are
+  passed, the workflow logs in with `${{ github.actor }}` / `${{ github.token }}`. Callers must set
+  `permissions: packages: write` on the job (or workflow) for the push to succeed.
+- Local/insecure registries: omit both secrets — login is skipped (previous behavior).
 
 **Outputs:**
 - `image`: full ref of the primary tag, e.g. `registry.example.local:5001/my-app:abc1234`
@@ -203,6 +212,8 @@ on:
   multi-line `GITHUB_OUTPUT` values into a `run:` line, which breaks shell line-continuation
 - Outputs `image` so a downstream `k8s-deploy.yml` job can consume the exact built ref via
   `needs.<job>.outputs.image` without recomputing the tag
+- Registry auth is opt-in by host/secrets so the navi-admin local-registry path stays zero-config,
+  while the documented `ghcr.io/org` example works without extra secret wiring
 
 ### k8s-deploy.yml
 
