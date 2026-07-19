@@ -71,10 +71,13 @@ jobs:
           go mod verify
 
       - name: Build
-        run: go build ${{ inputs.build-flags }} ./...
+        env:
+          BUILD_FLAGS: ${{ inputs.build-flags }}
+        run: go build ${BUILD_FLAGS} ./...
 
       - name: Test
         if: ${{ inputs.run-tests }}
         env:
           POSTGRES_DSN: ${{ inputs.postgres-dsn }}
-        run: go test ${{ inputs.test-flags }} ./...
+          TEST_FLAGS: ${{ inputs.test-flags }}
+        run: go test ${TEST_FLAGS} ./...

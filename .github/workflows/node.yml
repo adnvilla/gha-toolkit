@@ -75,19 +75,25 @@ jobs:
         if: >-
           ${{ inputs.package-manager == 'pnpm' && (inputs.run-build ||
           inputs.run-lint || inputs.run-typecheck || inputs.run-tests) }}
-        run: pnpm install ${{ inputs.install-args }}
+        env:
+          INSTALL_ARGS: ${{ inputs.install-args }}
+        run: pnpm install ${INSTALL_ARGS}
 
       - name: Install dependencies (npm)
         if: >-
           ${{ inputs.package-manager == 'npm' && (inputs.run-build ||
           inputs.run-lint || inputs.run-typecheck || inputs.run-tests) }}
-        run: npm ci ${{ inputs.install-args }}
+        env:
+          INSTALL_ARGS: ${{ inputs.install-args }}
+        run: npm ci ${INSTALL_ARGS}
 
       - name: Install dependencies (yarn)
         if: >-
           ${{ inputs.package-manager == 'yarn' && (inputs.run-build ||
           inputs.run-lint || inputs.run-typecheck || inputs.run-tests) }}
-        run: yarn install ${{ inputs.install-args }}
+        env:
+          INSTALL_ARGS: ${{ inputs.install-args }}
+        run: yarn install ${INSTALL_ARGS}
 
       - name: Build
         if: ${{ inputs.run-build }}
