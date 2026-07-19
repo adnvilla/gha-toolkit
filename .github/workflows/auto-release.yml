@@ -1,5 +1,6 @@
 # Release workflow for gha-toolkit
-# Generates automatic releases using semantic-release when CI passes
+# Triggers the reusable release.yml when CI passes on master — dogfoods the
+# same workflow shipped to consumers instead of duplicating its steps.
 
 name: Release
 
@@ -11,32 +12,13 @@ on:
 
 jobs:
   release:
-    name: Semantic Release
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/release.yml
     permissions:
       contents: write
       issues: write
       pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-
-      - name: Install semantic-release
-        run: |
-          npm install -g semantic-release @semantic-release/git \
-            @semantic-release/changelog @semantic-release/exec \
-            conventional-changelog-conventionalcommits
-
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+    with:
+      dry-run: false
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
