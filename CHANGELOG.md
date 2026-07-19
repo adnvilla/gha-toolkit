@@ -1,3 +1,9 @@
+## [1.3.3](https://github.com/adnvilla/gha-toolkit/compare/v1.3.2...v1.3.3) (2026-07-19)
+
+### 🐛 Bug Fixes
+
+* add registry authentication to docker-build-push.yml ([4bfd516](https://github.com/adnvilla/gha-toolkit/commit/4bfd5169654cec78af1ec75a91367ac3e1f360ee)), closes [#8](https://github.com/adnvilla/gha-toolkit/issues/8)
+
 ## [1.3.2](https://github.com/adnvilla/gha-toolkit/compare/v1.3.1...v1.3.2) (2026-07-19)
 
 ### 🐛 Bug Fixes
