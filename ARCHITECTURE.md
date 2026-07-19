@@ -231,8 +231,10 @@ on:
 - `helm-set` (string, one `KEY=VALUE` per line, for one-off overrides)
 - `wait` / `atomic` (boolean, default true), `timeout` (string, default `180s`)
 - `helm-version` (string, default `v3.16.2`, installed via `azure/setup-helm` if not already present)
-- `dry-run` (boolean, default false): renders the chart client-side (`helm --dry-run=client`) — no
-  kube-context/cluster access needed in this mode, used by `test.yml` to smoke-test the workflow
+- `dry-run` (boolean, default false): renders the chart client-side via `helm template` — no
+  kube-context/cluster access needed in this mode, used by `test.yml` to smoke-test the workflow.
+  (`helm upgrade --dry-run=client` is intentionally *not* used: it still contacts the cluster and
+  would hit whatever context is current in the runner's kubeconfig when context selection is skipped.)
 - `adopt-existing` (boolean, default false): one-time migration switch — deletes any pre-existing
   `Deployment`/`Service`/`Ingress` named `release-name` in `namespace` before the Helm upgrade, so a
   service previously managed by raw `kubectl apply` can be adopted. See `charts/app/README.md` for why
@@ -255,7 +257,8 @@ on:
      `release-name` in `namespace`
    - Splits `image` into `image.repository`/`image.tag` and runs
      `helm upgrade --install --create-namespace -f <values-file> --set image.repository=... --set image.tag=... --wait --atomic`
-     (or `--dry-run=client` instead of `--wait`/`--atomic` when `dry-run` is true)
+     (or `helm template` with the same values/`--set` flags when `dry-run` is true — no
+     `--create-namespace`/`--wait`/`--atomic`/`--timeout`, and no cluster contact)
 
 **Design Decisions:**
 - No `Namespace` template in the chart — `--create-namespace` replaces the manual "apply namespace
@@ -524,7 +527,7 @@ npx semantic-release --dry-run
 ```
 
 `test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`,
-`docker-build-push.yml` (build-only) and `k8s-deploy.yml` (`--dry-run=client`) against this repo
+`docker-build-push.yml` (build-only) and `k8s-deploy.yml` (`helm template` dry-run) against this repo
 without needing real Go/Node projects, a registry, or a cluster.
 
 ### Integration Testing

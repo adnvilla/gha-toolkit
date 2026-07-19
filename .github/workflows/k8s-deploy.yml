@@ -86,8 +86,9 @@ on:
         default: 'v3.16.2'
       dry-run:
         description: >-
-          Render the chart client-side (helm --dry-run=client) instead of deploying.
-          No kube-context/cluster access is required in this mode.
+          Render the chart client-side (helm template) instead of deploying.
+          No kube-context/cluster access is required in this mode — unlike
+          helm upgrade --dry-run=client, helm template never contacts a cluster.
         required: false
         type: boolean
         default: false
@@ -190,25 +191,34 @@ jobs:
           IMAGE_REPO="${IMAGE%:*}"
           IMAGE_TAG="${IMAGE##*:}"
 
-          ARGS=(
-            upgrade --install "${RELEASE_NAME}" "${CHART_DIR}"
-            -n "${NAMESPACE}" --create-namespace
+          # Shared flags for both template (dry-run) and upgrade paths.
+          # helm-set overrides are appended after the image --set so callers can
+          # still override image.repository / image.tag if needed.
+          RENDER_ARGS=(
+            -n "${NAMESPACE}"
             -f "${VALUES_FILE}"
             --set "image.repository=${IMAGE_REPO}"
             --set "image.tag=${IMAGE_TAG}"
-            --timeout "${TIMEOUT}"
           )
-
-          if [ "${DRY_RUN}" == "true" ]; then
-            ARGS+=(--dry-run=client)
-          else
-            [ "${WAIT}" == "true" ] && ARGS+=(--wait)
-            [ "${ATOMIC}" == "true" ] && ARGS+=(--atomic)
-          fi
 
           while IFS= read -r kv; do
             [ -z "$kv" ] && continue
-            ARGS+=(--set "$kv")
+            RENDER_ARGS+=(--set "$kv")
           done <<< "${HELM_SET}"
 
-          helm "${ARGS[@]}"
+          if [ "${DRY_RUN}" == "true" ]; then
+            # helm template is genuinely offline — no cluster lookup, no
+            # accidental use of the runner's current kubeconfig context.
+            # (helm upgrade --dry-run=client still contacts the cluster.)
+            helm template "${RELEASE_NAME}" "${CHART_DIR}" "${RENDER_ARGS[@]}"
+          else
+            ARGS=(
+              upgrade --install "${RELEASE_NAME}" "${CHART_DIR}"
+              "${RENDER_ARGS[@]}"
+              --create-namespace
+              --timeout "${TIMEOUT}"
+            )
+            [ "${WAIT}" == "true" ] && ARGS+=(--wait)
+            [ "${ATOMIC}" == "true" ] && ARGS+=(--atomic)
+            helm "${ARGS[@]}"
+          fi
