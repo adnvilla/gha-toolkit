@@ -1,3 +1,13 @@
+## [1.2.1](https://github.com/adnvilla/gha-toolkit/compare/v1.2.0...v1.2.1) (2026-07-19)
+
+### 🐛 Bug Fixes
+
+* build/deploy the exact triggering ref and auto-resolve chart version ([1aadae3](https://github.com/adnvilla/gha-toolkit/commit/1aadae3a9286930655b0afef3c2a129ba7061226)), closes [#4](https://github.com/adnvilla/gha-toolkit/issues/4) [#5](https://github.com/adnvilla/gha-toolkit/issues/5) [#6](https://github.com/adnvilla/gha-toolkit/issues/6)
+
+### 📚 Documentation
+
+* fix stale [@v1](https://github.com/v1).0.0 pins in Example 8, add doc-pin CI guard ([b7760fc](https://github.com/adnvilla/gha-toolkit/commit/b7760fc8e2eecd239a6503a776babeb2975d3c3b)), closes [#7](https://github.com/adnvilla/gha-toolkit/issues/7)
+
 ## [1.2.0](https://github.com/adnvilla/gha-toolkit/compare/v1.1.1...v1.2.0) (2026-07-19)
 
 ### 🚀 Features
