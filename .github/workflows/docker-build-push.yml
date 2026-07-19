@@ -12,6 +12,15 @@ on:
         description: 'Path to the Dockerfile'
         required: true
         type: string
+      ref:
+        description: >-
+          Git ref/SHA to check out and build. Defaults to whatever the workflow run's own context
+          resolves to, which for workflow_run-triggered CD is the default branch HEAD, not the
+          commit that triggered the event — pass github.event.workflow_run.head_sha explicitly
+          in that case.
+        required: false
+        type: string
+        default: ''
       context:
         description: 'Docker build context'
         required: false
@@ -69,11 +78,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Compute tags
         id: tags
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
           IMAGE="${{ inputs.registry-host }}/${{ inputs.image-name }}"
           {
             echo "image=${IMAGE}:${SHORT_SHA}"

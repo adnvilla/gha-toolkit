@@ -11,11 +11,22 @@ on:
     inputs:
       toolkit-ref:
         description: >-
-          Git ref of adnvilla/gha-toolkit to pull charts/app from. Set this to the same
-          tag used in this workflow's `uses:` line (e.g. 'v1.4.0') so the chart version
-          matches the workflow version. Ignored when use-local-chart is true.
-        required: true
+          Optional override for the git ref of adnvilla/gha-toolkit to pull charts/app from.
+          Defaults to the exact commit this workflow file was called at (via job.workflow_sha),
+          so the chart version always matches the workflow version with no input needed. Only
+          set this to test a chart from a branch. Ignored when use-local-chart is true.
+        required: false
         type: string
+        default: ''
+      ref:
+        description: >-
+          Git ref/SHA of the calling repo to check out (for the values file). Defaults to
+          whatever the workflow run's own context resolves to, which for workflow_run-triggered
+          CD is the default branch HEAD, not the commit that triggered the event — pass
+          github.event.workflow_run.head_sha explicitly in that case.
+        required: false
+        type: string
+        default: ''
       use-local-chart:
         description: 'Use a chart from the calling repo instead of charts/app from gha-toolkit'
         required: false
@@ -80,6 +91,17 @@ on:
         required: false
         type: boolean
         default: false
+      adopt-existing:
+        description: >-
+          One-time migration switch: before the Helm upgrade, delete any pre-existing
+          Deployment/Service/Ingress named release-name in namespace (e.g. created by a prior
+          kubectl-apply-based pipeline) so Helm can recreate them cleanly instead of failing on
+          ownership metadata / the Deployment's immutable selector. Recreates a new ClusterIP.
+          Use only for the first migration deploy, then set back to false — leaving it true
+          recreates Service/Ingress on every deploy. See charts/app/README.md.
+        required: false
+        type: boolean
+        default: false
       runs-on:
         description: 'Runner label to execute the job on'
         required: false
@@ -92,13 +114,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Checkout gha-toolkit chart
         if: ${{ !inputs.use-local-chart }}
         uses: actions/checkout@v4
         with:
-          repository: adnvilla/gha-toolkit
-          ref: ${{ inputs.toolkit-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.toolkit-ref || job.workflow_sha }}
           path: .gha-toolkit-chart
 
       - name: Setup Helm
@@ -111,6 +135,19 @@ jobs:
         run: |
           kubectl config use-context "${{ inputs.kube-context }}"
           kubectl cluster-info
+
+      - name: Adopt existing resources
+        if: ${{ inputs.adopt-existing && !inputs.dry-run }}
+        env:
+          RELEASE_NAME: ${{ inputs.release-name }}
+          NAMESPACE: ${{ inputs.namespace }}
+        run: |
+          for kind in deployment service ingress; do
+            if kubectl get "$kind" "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+              echo "Deleting pre-existing ${kind}/${RELEASE_NAME} in ${NAMESPACE} so Helm can recreate it"
+              kubectl delete "$kind" "$RELEASE_NAME" -n "$NAMESPACE"
+            fi
+          done
 
       - name: Deploy with Helm
         env:

@@ -58,6 +58,72 @@ not derived from `containerPort`, since they're raw pass-through blocks.
 ## Versioning
 
 `Chart.yaml`'s `version` is bumped manually whenever a template changes in a way consumers should
-notice (see `CONTRIBUTING.md`). `k8s-deploy.yml` pulls this chart from `gha-toolkit` at the same git
-ref (`toolkit-ref` input) the caller pinned for the workflow itself, so a project pinned to `@v1.4.0`
-always gets the exact chart version shipped in that tag.
+notice (see `CONTRIBUTING.md`). `k8s-deploy.yml` auto-resolves the exact `gha-toolkit` commit it was
+called at (via the `job.workflow_sha` context) and pulls this chart from there, so a project pinned
+to `k8s-deploy.yml@v1.4.0` always gets the exact chart version shipped in that tag — no extra input
+needed. `toolkit-ref` remains available as an optional override, e.g. to test a chart change from a
+branch before tagging a release.
+
+## Migrating an existing deployment
+
+If a service is currently deployed with raw `kubectl apply -f k8s/` (no Helm involved) and you point
+`k8s-deploy.yml` at it, the first `helm upgrade --install` **fails** — reproduced and confirmed against
+a real cluster:
+
+1. **Ownership**: the existing Service/Ingress/Deployment don't carry Helm's ownership annotations
+   (`meta.helm.sh/release-name`, `meta.helm.sh/release-namespace`) or the `app.kubernetes.io/managed-by:
+   Helm` label, so Helm refuses to touch them (`invalid ownership metadata`).
+2. **Immutable selector**: even after annotating ownership by hand, the Deployment's
+   `spec.selector` is immutable and almost never matches `charts/app`'s selector
+   (`app.kubernetes.io/name`/`app.kubernetes.io/instance`), so the upgrade is rejected outright.
+
+**Do not just `kubectl annotate`/`kubectl label` the Service and stop there** — that alone leaves the
+Service in a broken state. Kubernetes' default patch merges the `spec.selector` map instead of
+replacing it, so the *old* selector key (e.g. `app: my-app`) survives alongside the chart's new keys.
+New pods don't carry that old label, so the Service ends up matching **zero pods** — `helm upgrade`
+reports success and `kubectl rollout status` looks healthy, but the Service silently has no endpoints
+and all traffic drops. (This exact failure was reproduced while validating this section.)
+
+The resources this chart manages are stateless (no PVCs, no Secrets holding data), so the correct fix
+is simpler than adopting them: **delete the old Deployment/Service/Ingress and let Helm create them
+fresh.** The only externally visible cost is a new ClusterIP, which doesn't matter for anything that
+reaches the Service by DNS name or through the Ingress (i.e. virtually always).
+
+### Option A: `adopt-existing: true` (recommended)
+
+```yaml
+deploy:
+  uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@v1.3.0
+  with:
+    adopt-existing: true   # one-time only — see warning below
+    release-name: my-app
+    namespace: my-app
+    # ...the rest of your usual inputs
+```
+
+Run the workflow once with `adopt-existing: true` (ideally via `workflow_dispatch`, not your normal
+automatic CD trigger, so it's a deliberate one-off action). It deletes any pre-existing
+`deployment`/`service`/`ingress` named `<release-name>` in `<namespace>` before the Helm upgrade, then
+proceeds as normal.
+
+**⚠️ Set it back to `false` (or remove it) immediately after that one deploy.** Left `true`
+permanently, every future deploy deletes and recreates the Service/Ingress again — a new ClusterIP,
+and a brief gap, on every single release.
+
+### Option B: manual runbook
+
+Equivalent to what `adopt-existing` does, if you'd rather run it by hand:
+
+```bash
+kubectl delete deployment <release-name> -n <namespace> --ignore-not-found
+kubectl delete service <release-name> -n <namespace> --ignore-not-found
+kubectl delete ingress <release-name> -n <namespace> --ignore-not-found
+
+helm upgrade --install <release-name> charts/app -n <namespace> --create-namespace \
+  -f k8s/values-<env>.yaml \
+  --set image.repository=... --set image.tag=... \
+  --wait --atomic
+```
+
+A pre-existing plain `Namespace` needs no special handling — `--create-namespace` is already a safe
+no-op when the namespace exists and isn't Helm-owned (also confirmed against a real cluster).
