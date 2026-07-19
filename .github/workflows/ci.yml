@@ -70,7 +70,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Confirm every workflows/*.yml@ref pin in README/EXAMPLES exists at that ref
+      - name: Confirm every workflows/*.yml@ref pin in the docs exists at that ref
         run: |
           set -euo pipefail
           FAIL=0
@@ -85,7 +85,7 @@ jobs:
               FAIL=1
             fi
           done < <(grep -ohE 'adnvilla/gha-toolkit/\.github/workflows/[A-Za-z0-9_-]+\.yml@[A-Za-z0-9._/-]+' \
-            README.md EXAMPLES.md | sort -u)
+            README.md EXAMPLES.md ENVIRONMENTS.md | sort -u)
           exit $FAIL
 
   # This job always passes, it's just to have a consolidated status
