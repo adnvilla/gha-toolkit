@@ -113,7 +113,7 @@ monorepo/workspace layouts.
 ```yaml
 jobs:
   ci:
-    uses: adnvilla/gha-toolkit/.github/workflows/node.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/node.yml@v1.2.0
     with:
       node-version: '20'          # Optional, default: '20'
       package-manager: 'pnpm'     # Optional, default: 'pnpm' (pnpm | npm | yarn)
@@ -134,7 +134,7 @@ exact ref that was built.
 ```yaml
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app
@@ -154,7 +154,7 @@ consumers only need a small `values.yaml` instead of hand-written manifests. Run
 ```yaml
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app
@@ -163,9 +163,8 @@ jobs:
 
   deploy:
     needs: build
-    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@v1.2.0
     with:
-      toolkit-ref: v1.0.0          # Same tag used above, pins the chart version
       release-name: my-app
       namespace: my-app
       kube-context: local

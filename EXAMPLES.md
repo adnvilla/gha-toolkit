@@ -211,7 +211,7 @@ on:
 
 jobs:
   ci:
-    uses: adnvilla/gha-toolkit/.github/workflows/node.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/node.yml@v1.2.0
     with:
       node-version: '20'
       package-manager: 'pnpm'
@@ -240,8 +240,11 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
     with:
+      # workflow_run's own GITHUB_SHA is the default branch HEAD, not the commit CI
+      # actually validated — pass the real one explicitly so build/deploy never race ahead.
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       dockerfile: apps/web/Dockerfile
       image-name: my-app-web
       registry-host: registry.example.local:5001
@@ -250,9 +253,11 @@ jobs:
 
   deploy:
     needs: build
-    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@v1.2.0
     with:
-      toolkit-ref: v1.0.0   # same tag used above, pins charts/app to that version
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      # toolkit-ref not needed: k8s-deploy.yml auto-pins charts/app to this same
+      # workflow's own commit (job.workflow_sha) unless you override it explicitly.
       release-name: my-app-web
       namespace: my-app
       kube-context: ${{ github.event.inputs.kube_context || 'local' }}
@@ -306,6 +311,11 @@ affinity:
 ```
 
 See `charts/app/README.md` for the full list of values you can override this way.
+
+**Migrating a service that's currently deployed with raw `kubectl apply`?** The first `k8s-deploy.yml`
+run against it will fail (Helm refuses to adopt resources it doesn't own). Add `adopt-existing: true`
+to the `deploy` job for that one run only, then remove it — see "Migrating an existing deployment" in
+`charts/app/README.md` for the full runbook and why it must not stay on permanently.
 
 ## Important Notes
 

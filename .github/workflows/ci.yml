@@ -61,11 +61,38 @@ jobs:
             --set ingress.enabled=true \
             --set ingress.host=test.local > /dev/null
 
+  validate-doc-pins:
+    name: Validate Documentation Version Pins
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Confirm every workflows/*.yml@ref pin in README/EXAMPLES exists at that ref
+        run: |
+          set -euo pipefail
+          FAIL=0
+          while read -r pin; do
+            rest="${pin#adnvilla/gha-toolkit/}"
+            path="${rest%@*}"
+            ref="${rest##*@}"
+            if git show "${ref}:${path}" > /dev/null 2>&1; then
+              echo "OK   ${path}@${ref}"
+            else
+              echo "::error::${path} does not exist at ref '${ref}' (referenced in docs)"
+              FAIL=1
+            fi
+          done < <(grep -ohE 'adnvilla/gha-toolkit/\.github/workflows/[A-Za-z0-9_-]+\.yml@[A-Za-z0-9._/-]+' \
+            README.md EXAMPLES.md | sort -u)
+          exit $FAIL
+
   # This job always passes, it's just to have a consolidated status
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [validate-workflows, validate-markdown, validate-chart]
+    needs: [validate-workflows, validate-markdown, validate-chart, validate-doc-pins]
     if: always()
     steps:
       - name: Check CI Status
@@ -76,6 +103,10 @@ jobs:
           fi
           if [ "${{ needs.validate-chart.result }}" != "success" ]; then
             echo "Helm chart validation failed"
+            exit 1
+          fi
+          if [ "${{ needs.validate-doc-pins.result }}" != "success" ]; then
+            echo "Documentation version pin validation failed"
             exit 1
           fi
           if [ "${{ needs.validate-markdown.result }}" != "success" ]; then
