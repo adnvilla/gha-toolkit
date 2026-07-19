@@ -1,3 +1,14 @@
+## [1.2.0](https://github.com/adnvilla/gha-toolkit/compare/v1.1.1...v1.2.0) (2026-07-19)
+
+### 🚀 Features
+
+* add Node CI, Docker build/push, and Helm-based Kubernetes deploy workflows ([1a7020f](https://github.com/adnvilla/gha-toolkit/commit/1a7020f043be616c2761a039288f7c488563f423))
+
+### 📚 Documentation
+
+* add CLAUDE.md repo guidance for Claude Code ([2c84fd4](https://github.com/adnvilla/gha-toolkit/commit/2c84fd4785a00464f1af49921fe58f62338863eb))
+* sync release-rule docs with .releaserc.json ([e4137d4](https://github.com/adnvilla/gha-toolkit/commit/e4137d493b54bcbcd75f8a1d7c85abc9276a81bb))
+
 ## [1.1.1](https://github.com/adnvilla/gha-toolkit/compare/v1.1.0...v1.1.1) (2025-10-14)
 
 ### ♻️ Code Refactoring
