@@ -70,7 +70,7 @@ on:
 
 jobs:
   test:
-    uses: adnvilla/gha-toolkit/.github/workflows/go-base.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/go-base.yml@v1.1.0
     with:
       go-version: '1.24'           # Optional, default: '1.24'
       run-tests: true              # Optional, default: true

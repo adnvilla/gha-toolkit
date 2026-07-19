@@ -32,7 +32,7 @@ on:
 ```yaml
 jobs:
   ci:
-    uses: adnvilla/gha-toolkit/.github/workflows/go-base.yml@v1.0.0
+    uses: adnvilla/gha-toolkit/.github/workflows/go-base.yml@v1.1.0
     with:
       go-version: '1.24'
 ```
