@@ -76,3 +76,4 @@ jobs:
       values-file: charts/app/values.yaml
       image: registry.example.local:5000/smoke-test:latest
       dry-run: true
+      environment: 'test'

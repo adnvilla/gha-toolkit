@@ -258,12 +258,16 @@ jobs:
       ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       # toolkit-ref not needed: k8s-deploy.yml auto-pins charts/app to this same
       # workflow's own commit (job.workflow_sha) unless you override it explicitly.
+      environment: production   # default already, spelled out here for clarity
       release-name: my-app-web
       namespace: my-app
       kube-context: ${{ github.event.inputs.kube_context || 'local' }}
       values-file: k8s/values-local.yaml
       image: ${{ needs.build.outputs.image }}
 ```
+
+Want a staging environment in front of this (PRs deploy automatically, production stays exactly as
+above)? See [ENVIRONMENTS.md](ENVIRONMENTS.md) for the full recipe.
 
 ```yaml
 # k8s/values-local.yaml — replaces hand-written deployment.yml/service.yml/ingress.yml

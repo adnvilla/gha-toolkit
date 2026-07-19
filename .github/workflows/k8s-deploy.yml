@@ -91,6 +91,21 @@ on:
         required: false
         type: boolean
         default: false
+      environment:
+        description: >-
+          GitHub Environment name to bind this deployment to (shows up in the repo's Environments
+          tab with deployment history, and enables that environment's protection rules/secrets if
+          configured in the calling repo's Settings). Defaults to 'production' so every existing
+          caller is automatically treated as a production deploy with no with: block changes
+          needed. See ENVIRONMENTS.md for how to add a staging environment.
+        required: false
+        type: string
+        default: 'production'
+      environment-url:
+        description: 'Optional URL shown next to the environment in the GitHub Actions UI'
+        required: false
+        type: string
+        default: ''
       adopt-existing:
         description: >-
           One-time migration switch: before the Helm upgrade, delete any pre-existing
@@ -111,6 +126,9 @@ on:
 jobs:
   deploy:
     runs-on: ${{ inputs.runs-on }}
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.environment-url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

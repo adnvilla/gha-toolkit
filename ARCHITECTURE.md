@@ -217,9 +217,15 @@ on:
 ```
 
 **Inputs:**
-- `toolkit-ref` (string, required): git ref of `adnvilla/gha-toolkit` to pull `charts/app` from —
-  set this to the same tag used in this workflow's own `uses:` line so the chart version always
-  matches the workflow version. Ignored when `use-local-chart` is true.
+- `toolkit-ref` (string, optional, default `''`): override for the git ref of `adnvilla/gha-toolkit`
+  to pull `charts/app` from. Left empty, it auto-resolves to `job.workflow_sha` (the exact commit this
+  workflow was called at — see Design Decisions below), so the chart version always matches the
+  workflow version with **no input needed**. Only set this to test a chart from a branch. Ignored when
+  `use-local-chart` is true.
+- `ref` (string, optional, default `''`): git ref/SHA of the *calling* repo to check out (for the
+  values file). Left empty, defaults to whatever the run's own context resolves to — which for
+  `workflow_run`-triggered CD is the default branch HEAD, **not** the commit that triggered the event.
+  Pass `github.event.workflow_run.head_sha` explicitly in that case (see `EXAMPLES.md` Example 8).
 - `use-local-chart` (boolean, default false) / `chart-path` (string, default `charts/app`)
 - `release-name`, `namespace`, `kube-context`, `values-file`, `image` (all string, required)
 - `helm-set` (string, one `KEY=VALUE` per line, for one-off overrides)
@@ -227,17 +233,29 @@ on:
 - `helm-version` (string, default `v3.16.2`, installed via `azure/setup-helm` if not already present)
 - `dry-run` (boolean, default false): renders the chart client-side (`helm --dry-run=client`) — no
   kube-context/cluster access needed in this mode, used by `test.yml` to smoke-test the workflow
+- `adopt-existing` (boolean, default false): one-time migration switch — deletes any pre-existing
+  `Deployment`/`Service`/`Ingress` named `release-name` in `namespace` before the Helm upgrade, so a
+  service previously managed by raw `kubectl apply` can be adopted. See `charts/app/README.md` for why
+  this deletes rather than adopts-in-place (a naive adopt-by-annotation was tested and found to
+  silently break Service routing).
+- `environment` (string, default `'production'`) / `environment-url` (string, default `''`): binds the
+  job to a GitHub Environment — see `ENVIRONMENTS.md`. The default means every existing caller is
+  automatically treated as production with no `with:` changes.
 - `runs-on` (string, default `self-hosted` — deploying to a private cluster almost always requires a
   runner that already has network access and a working kubeconfig)
 
 **Jobs:**
 
-1. **deploy:**
-   - Checks out the calling repo (for `values-file`) and, unless `use-local-chart`, checks out
-     `adnvilla/gha-toolkit@${{ inputs.toolkit-ref }}` into `.gha-toolkit-chart/` to get the chart
+1. **deploy:** (job-level `environment: { name: inputs.environment, url: inputs.environment-url }`)
+   - Checks out the calling repo at `ref` (for `values-file`) and, unless `use-local-chart`, checks out
+     `${{ job.workflow_repository }}@${{ inputs.toolkit-ref || job.workflow_sha }}` into
+     `.gha-toolkit-chart/` to get the chart
    - Selects the `kube-context` (skipped entirely when `dry-run` is true)
+   - If `adopt-existing`, deletes any pre-existing `deployment`/`service`/`ingress` matching
+     `release-name` in `namespace`
    - Splits `image` into `image.repository`/`image.tag` and runs
      `helm upgrade --install --create-namespace -f <values-file> --set image.repository=... --set image.tag=... --wait --atomic`
+     (or `--dry-run=client` instead of `--wait`/`--atomic` when `dry-run` is true)
 
 **Design Decisions:**
 - No `Namespace` template in the chart — `--create-namespace` replaces the manual "apply namespace
@@ -245,8 +263,18 @@ on:
   creates `deployment`/`ingress` before the namespace exists)
 - `--atomic` gives automatic rollback on a failed rollout, which the previous `kubectl set image` +
   `kubectl rollout status` approach didn't have
-- The chart is versioned inside `gha-toolkit` itself and pinned via `toolkit-ref`, so a project
-  pinned to `k8s-deploy.yml@v1.4.0` always deploys the exact chart shipped in that tag
+- The chart is versioned inside `gha-toolkit` itself and auto-resolved via `job.workflow_repository`/
+  `job.workflow_sha` — the context GitHub documents specifically for a reusable workflow to check out
+  its own repo at the exact ref it was called with — so a project pinned to `k8s-deploy.yml@v1.4.0`
+  always deploys the exact chart shipped in that tag with zero extra input. This also means a fork of
+  `gha-toolkit` works unmodified (no hardcoded `adnvilla/gha-toolkit` string).
+- `environment:` can only be declared inside this workflow's own job — GitHub rejects `environment:` on
+  a job that also has `uses:` (a reusable workflow call). Because a reusable workflow's execution
+  context (identity, permissions, billing) always belongs to the *calling* repo, the environment
+  referenced here resolves against each consumer's own Settings → Environments independently; this
+  toolkit doesn't need to know they exist. This specific cross-repo resolution behavior is documented
+  by GitHub but wasn't verified against a second live repo while building it — see `ENVIRONMENTS.md`'s
+  "Known limitation" section.
 
 ### Helm Chart: charts/app
 

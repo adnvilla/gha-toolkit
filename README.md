@@ -29,6 +29,7 @@ Instead of having ~200 lines of duplicated workflows in each project.
 ## 📚 Documentation
 
 - **[EXAMPLES.md](EXAMPLES.md)** - Practical usage examples
+- **[ENVIRONMENTS.md](ENVIRONMENTS.md)** - Staging/production environments, approval gates
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to add workflows
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical details
 
@@ -147,7 +148,9 @@ jobs:
 
 Deploys to Kubernetes via Helm using the generic chart shipped in this repo (`charts/app`), so
 consumers only need a small `values.yaml` instead of hand-written manifests. Runs
-`helm upgrade --install --create-namespace --wait --atomic`.
+`helm upgrade --install --create-namespace --wait --atomic`, bound to a GitHub Environment
+(`environment` input, default `production`) for deployment history and optional approval gates —
+see [ENVIRONMENTS.md](ENVIRONMENTS.md).
 
 **Usage** (chained after `docker-build-push.yml` via `needs`):
 
@@ -170,10 +173,12 @@ jobs:
       kube-context: local
       values-file: k8s/values-local.yaml
       image: ${{ needs.build.outputs.image }}
+      # environment defaults to 'production' — set explicitly for a staging deploy,
+      # see ENVIRONMENTS.md
 ```
 
-See `charts/app/README.md` for the full values reference, and `EXAMPLES.md` for a complete
-CI → build → deploy pipeline.
+See `charts/app/README.md` for the full values reference, `ENVIRONMENTS.md` for staging/production
+setup, and `EXAMPLES.md` for a complete CI → build → deploy pipeline.
 
 ## 🚀 Future Workflows
 
