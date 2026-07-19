@@ -52,9 +52,34 @@ Each commit with `feat:` or `fix:` automatically generates a new version.
 
 ## 📋 Available Workflows
 
-### 1. Go Build and Test (`go.yml`)
+### 1. Go Build and Test — no external services (`go-base.yml`)
 
-Build and test for Go projects with integrated PostgreSQL.
+Build and test for Go libraries/projects that don't need a database or other services. Prefer this
+over `go.yml` unless your tests require PostgreSQL.
+
+**Usage**:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  test:
+    uses: adnvilla/gha-toolkit/.github/workflows/go-base.yml@v1.1.0
+    with:
+      go-version: '1.24'           # Optional, default: '1.24'
+      run-tests: true              # Optional, default: true
+```
+
+### 2. Go Build and Test — with PostgreSQL (`go.yml`)
+
+Same as `go-base.yml`, but spins up a PostgreSQL service container and passes `POSTGRES_DSN` to the
+test step. Use this when your tests need a database; otherwise use `go-base.yml`.
 
 **Usage**:
 
@@ -77,7 +102,7 @@ jobs:
       postgres-dsn: 'host=localhost user=postgres password=postgres dbname=postgres port=5432 sslmode=disable'  # Optional
 ```
 
-### 2. Semantic Release (`release.yml`)
+### 3. Semantic Release (`release.yml`)
 
 Generates automatic releases with semantic versioning.
 
@@ -104,7 +129,7 @@ jobs:
 
 **Required configuration**: Copy `.releaserc.json.example` to your project as `.releaserc.json`
 
-### 3. Node Build and Test (`node.yml`)
+### 4. Node Build and Test (`node.yml`)
 
 Install/build/lint/typecheck/test for Node.js/TypeScript projects (pnpm, npm or yarn), including
 monorepo/workspace layouts.
@@ -124,7 +149,7 @@ jobs:
       run-tests: true             # Optional, default: true
 ```
 
-### 4. Docker Build and Push (`docker-build-push.yml`)
+### 5. Docker Build and Push (`docker-build-push.yml`)
 
 Builds a Docker image and pushes it to a registry (public or a private/local insecure one), tagging
 it with the short commit SHA plus any extra tags. Outputs `image` so a following job can consume the
@@ -163,7 +188,7 @@ jobs:
       registry-host: ghcr.io/my-org
 ```
 
-### 5. Kubernetes Deploy (`k8s-deploy.yml`)
+### 6. Kubernetes Deploy (`k8s-deploy.yml`)
 
 Deploys to Kubernetes via Helm using the generic chart shipped in this repo (`charts/app`), so
 consumers only need a small `values.yaml` instead of hand-written manifests. Runs
