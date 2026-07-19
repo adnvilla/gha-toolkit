@@ -6,25 +6,37 @@ name: Test Workflows
 on:
   workflow_dispatch:
     inputs:
-      test-workflow:
-        description: 'Which workflow to test'
-        required: true
-        type: choice
-        options:
-          - go
-          - release
-          - both
+      run-go:
+        description: 'Test go.yml'
+        type: boolean
+        default: false
+      run-release:
+        description: 'Test release.yml (dry-run)'
+        type: boolean
+        default: false
+      run-node:
+        description: 'Test node.yml (this repo has no Node project, so build/lint/typecheck/test are skipped)'
+        type: boolean
+        default: false
+      run-docker-build-push:
+        description: 'Test docker-build-push.yml against a fixture Dockerfile (build only, no push)'
+        type: boolean
+        default: false
+      run-k8s-deploy:
+        description: 'Test k8s-deploy.yml (client-side dry-run, no cluster required)'
+        type: boolean
+        default: false
 
 jobs:
   test-go-workflow:
-    if: ${{ github.event.inputs.test-workflow == 'go' || github.event.inputs.test-workflow == 'both' }}
+    if: ${{ github.event.inputs.run-go == 'true' }}
     uses: ./.github/workflows/go.yml
     with:
       go-version: '1.24'
       run-tests: false  # This repo doesn't have Go code
 
   test-release-workflow:
-    if: ${{ github.event.inputs.test-workflow == 'release' || github.event.inputs.test-workflow == 'both' }}
+    if: ${{ github.event.inputs.run-release == 'true' }}
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
@@ -32,3 +44,35 @@ jobs:
       dry-run: true  # Always in dry-run for this repo
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-node-workflow:
+    if: ${{ github.event.inputs.run-node == 'true' }}
+    uses: ./.github/workflows/node.yml
+    with:
+      node-version: '20'
+      run-build: false
+      run-lint: false
+      run-typecheck: false
+      run-tests: false  # This repo has no Node project; validates workflow plumbing only
+
+  test-docker-build-push-workflow:
+    if: ${{ github.event.inputs.run-docker-build-push == 'true' }}
+    uses: ./.github/workflows/docker-build-push.yml
+    with:
+      dockerfile: .github/test-fixtures/Dockerfile
+      context: .github/test-fixtures
+      image-name: gha-toolkit-smoke-test
+      registry-host: registry.example.local:5000
+      push: false
+
+  test-k8s-deploy-workflow:
+    if: ${{ github.event.inputs.run-k8s-deploy == 'true' }}
+    uses: ./.github/workflows/k8s-deploy.yml
+    with:
+      toolkit-ref: ${{ github.ref_name }}
+      release-name: smoke-test
+      namespace: smoke-test
+      kube-context: unused-in-dry-run
+      values-file: charts/app/values.yaml
+      image: registry.example.local:5000/smoke-test:latest
+      dry-run: true

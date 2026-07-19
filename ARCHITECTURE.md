@@ -11,6 +11,32 @@ The toolkit follows a **two-tier architecture**:
 
 ## Reusable Workflows
 
+### go-base.yml
+
+**Purpose:** CI pipeline for Go projects/libraries that don't need any external service (no
+PostgreSQL). Same `build`/`test` steps as `go.yml` minus the service container.
+
+**Trigger:**
+```yaml
+on:
+  workflow_call:
+```
+
+**Inputs:**
+- `go-version` (string): Go version to use (default: '1.24')
+- `run-tests` (boolean): Whether to execute tests (default: true)
+- `test-flags` / `build-flags` (string): Extra flags for `go test`/`go build` (default: `-v`)
+- `runs-on` (string): Runner label (default: `ubuntu-latest`)
+
+**Usage Pattern:**
+```yaml
+jobs:
+  ci:
+    uses: adnvilla/gha-toolkit/.github/workflows/go-base.yml@v1.0.0
+    with:
+      go-version: '1.24'
+```
+
 ### go.yml
 
 **Purpose:** Provides a complete CI pipeline for Go projects with optional PostgreSQL integration.
@@ -111,11 +137,154 @@ jobs:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### node.yml
+
+**Purpose:** CI pipeline for Node.js/TypeScript projects — install, build, lint, typecheck and test,
+including workspace/monorepo layouts.
+
+**Trigger:**
+```yaml
+on:
+  workflow_call:
+```
+
+**Inputs:**
+- `node-version` (string): Node.js version (default: '20')
+- `package-manager` (string): `pnpm`, `npm` or `yarn` (default: `pnpm`)
+- `pnpm-version` (string): pnpm version, only used when `package-manager` is `pnpm` (default: '9.14.2')
+- `install-args` (string): Extra args for the install command (default: `--frozen-lockfile`)
+- `run-build` / `run-lint` / `run-typecheck` / `run-tests` (boolean): Each independently toggleable (default: true)
+- `runs-on` (string): Runner label (default: `ubuntu-latest`)
+
+**Jobs:**
+
+1. **build:**
+   - `pnpm/action-setup` (only for `package-manager: pnpm`) then `actions/setup-node` with native
+     package-manager caching (`cache: <package-manager>`)
+   - Installs dependencies **only if** at least one of `run-build`/`run-lint`/`run-typecheck`/`run-tests`
+     is true — skips install entirely when the caller wants none of them
+   - Runs the equivalent build/lint/typecheck/test command for the selected package manager
+     (`pnpm -r run X`, `npm run X --workspaces --if-present`, or `yarn workspaces run X`)
+
+**Design Decisions:**
+- Generic across the three major Node package managers instead of a pnpm-only workflow, so it fits
+  any future JS/TS project, not just pnpm monorepos
+- Uses `actions/setup-node`'s built-in cache instead of manually caching the pnpm store (simpler than
+  a hand-rolled `actions/cache` step)
+
+### docker-build-push.yml
+
+**Purpose:** Builds a Docker image and optionally pushes it to a registry — public (ghcr.io, Docker
+Hub) or a private/local insecure one. Tags with the short commit SHA plus any `extra-tags`.
+
+**Trigger:**
+```yaml
+on:
+  workflow_call:
+```
+
+**Inputs:**
+- `dockerfile` (string, required), `context` (string, default `.`)
+- `image-name` (string, required), `registry-host` (string, required)
+- `extra-tags` (string, one tag per line, default `latest`)
+- `build-args` (string, one `KEY=VALUE` per line)
+- `verify-insecure-registry` (boolean): Preflight-checks the Docker daemon can reach the registry
+  before building (only relevant when `push` is true; default: false)
+- `push` (boolean): Set to false to only validate that the image builds, without publishing
+  (default: true)
+- `runs-on` (string, default `ubuntu-latest`)
+
+**Outputs:**
+- `image`: full ref of the primary tag, e.g. `registry.example.local:5001/my-app:abc1234`
+- `short-sha`: the short commit SHA used as the primary tag
+
+**Design Decisions:**
+- Tag/build-arg lists are parsed into bash arrays inside a single step rather than interpolating
+  multi-line `GITHUB_OUTPUT` values into a `run:` line, which breaks shell line-continuation
+- Outputs `image` so a downstream `k8s-deploy.yml` job can consume the exact built ref via
+  `needs.<job>.outputs.image` without recomputing the tag
+
+### k8s-deploy.yml
+
+**Purpose:** Deploys an application to Kubernetes via Helm, using the generic chart shipped in this
+repo (`charts/app`) unless the caller supplies its own chart. Replaces raw `kubectl apply` +
+`kubectl set image` + `kubectl rollout status` with a single atomic `helm upgrade --install`.
+
+**Trigger:**
+```yaml
+on:
+  workflow_call:
+```
+
+**Inputs:**
+- `toolkit-ref` (string, required): git ref of `adnvilla/gha-toolkit` to pull `charts/app` from —
+  set this to the same tag used in this workflow's own `uses:` line so the chart version always
+  matches the workflow version. Ignored when `use-local-chart` is true.
+- `use-local-chart` (boolean, default false) / `chart-path` (string, default `charts/app`)
+- `release-name`, `namespace`, `kube-context`, `values-file`, `image` (all string, required)
+- `helm-set` (string, one `KEY=VALUE` per line, for one-off overrides)
+- `wait` / `atomic` (boolean, default true), `timeout` (string, default `180s`)
+- `helm-version` (string, default `v3.16.2`, installed via `azure/setup-helm` if not already present)
+- `dry-run` (boolean, default false): renders the chart client-side (`helm --dry-run=client`) — no
+  kube-context/cluster access needed in this mode, used by `test.yml` to smoke-test the workflow
+- `runs-on` (string, default `self-hosted` — deploying to a private cluster almost always requires a
+  runner that already has network access and a working kubeconfig)
+
+**Jobs:**
+
+1. **deploy:**
+   - Checks out the calling repo (for `values-file`) and, unless `use-local-chart`, checks out
+     `adnvilla/gha-toolkit@${{ inputs.toolkit-ref }}` into `.gha-toolkit-chart/` to get the chart
+   - Selects the `kube-context` (skipped entirely when `dry-run` is true)
+   - Splits `image` into `image.repository`/`image.tag` and runs
+     `helm upgrade --install --create-namespace -f <values-file> --set image.repository=... --set image.tag=... --wait --atomic`
+
+**Design Decisions:**
+- No `Namespace` template in the chart — `--create-namespace` replaces the manual "apply namespace
+  first" ordering workaround that raw `kubectl apply -f dir/` needs (alphabetical ordering otherwise
+  creates `deployment`/`ingress` before the namespace exists)
+- `--atomic` gives automatic rollback on a failed rollout, which the previous `kubectl set image` +
+  `kubectl rollout status` approach didn't have
+- The chart is versioned inside `gha-toolkit` itself and pinned via `toolkit-ref`, so a project
+  pinned to `k8s-deploy.yml@v1.4.0` always deploys the exact chart shipped in that tag
+
+### Helm Chart: charts/app
+
+A generic, reusable Helm chart for stateless HTTP applications, living in this repo so every
+consumer of `k8s-deploy.yml` shares one implementation instead of hand-writing
+`Deployment`/`Service`/`Ingress` manifests per project.
+
+- `Deployment`, `Service`, and an optional `Ingress` (rendered only when `ingress.enabled`)
+- `affinity`, `tolerations`, `nodeSelector`, `env`, `envFrom`, `resources`, `livenessProbe` and
+  `readinessProbe` are raw pass-through blocks (`toYaml` straight from `values.yaml`) — the chart
+  doesn't need new features for project-specific quirks (e.g. node affinity rules to avoid scheduling
+  on a control-plane node), only a values override
+- See `charts/app/README.md` for the full values reference and `Chart.yaml` version bump policy
+
+## Self-hosted runner prerequisites
+
+`docker-build-push.yml` (with a local registry) and `k8s-deploy.yml` are designed to run on a
+**self-hosted** runner with network access to the target registry/cluster — this is not obvious from
+the workflow YAML alone. The runner machine must have:
+
+- **Docker daemon** configured with the registry host under `insecure-registries` (Docker Desktop:
+  Settings → Docker Engine) if pushing to a local/private registry without TLS
+- **kubectl**, with every context passed via `kube-context` already defined locally — the kubeconfig
+  lives on the runner machine and is never passed as a GitHub secret, matching how `navi-admin`'s
+  existing pipeline works today
+- **helm** — `k8s-deploy.yml` installs it via `azure/setup-helm` if missing, but a pre-installed
+  version avoids the extra download on every run
+- **Node/pnpm/corepack** available if `node.yml` also runs on that runner
+
+`REGISTRY_HOST` and `KUBE_CONTEXT` are the recommended repo/org-level GitHub Variables for consumers
+to standardize on (see `navi-admin`'s `cd.yml` for the pattern), referenced as
+`${{ vars.REGISTRY_HOST }}` / `${{ vars.KUBE_CONTEXT }}` in the calling workflow.
+
 ## Internal Workflows
 
 ### ci.yml
 
-**Purpose:** Validates the toolkit itself - lints YAML and Markdown files.
+**Purpose:** Validates the toolkit itself - lints YAML/Markdown and validates the Helm chart.
 
 **Trigger:**
 ```yaml
@@ -128,10 +297,11 @@ on:
 
 **Jobs:**
 
-1. **lint:**
-   - Validates all `.yml` files with `yamllint`
-   - Validates all `.md` files with `markdownlint`
-   - Prevents merging PRs with syntax errors
+1. **validate-workflows:** Validates all `.yml` files with `yamllint`
+2. **validate-markdown:** Validates all `.md` files with `markdownlint`
+3. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values, to
+   catch broken chart templates before they ship in a tag
+4. **ci-complete:** Consolidated status gate over the three jobs above
 
 **Configuration Files:**
 - `.yamllint.yml`: YAML linting rules
@@ -176,40 +346,40 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 ## Workflow Interaction Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     External Project                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  .github/workflows/ci.yml                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  uses: adnvilla/gha-toolkit/.github/workflows/      │   │
-│  │        go.yml@v1.0.0                                │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                           │                                 │
-│                           ▼                                 │
-│  .github/workflows/release.yml                              │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  uses: adnvilla/gha-toolkit/.github/workflows/      │   │
-│  │        release.yml@v1.0.0                           │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                   External Project (e.g. navi-admin)                │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  .github/workflows/ci.yml                                          │
+│    uses: gha-toolkit/.github/workflows/{go,go-base,node}.yml@v1.x  │
+│                                                                     │
+│  .github/workflows/cd.yml                                          │
+│    build:  uses: .../docker-build-push.yml@v1.x                    │
+│                       │ outputs.image                               │
+│                       ▼                                            │
+│    deploy: uses: .../k8s-deploy.yml@v1.x  (needs: build)           │
+│              -f k8s/values-<env>.yaml  --image ${{ outputs.image }}│
+│                                                                     │
+│  .github/workflows/release.yml                                     │
+│    uses: gha-toolkit/.github/workflows/release.yml@v1.x            │
+│                                                                     │
+└───────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│                   gha-toolkit Repository                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  .github/workflows/go.yml         ◄── Reusable Workflows   │
-│  .github/workflows/release.yml    ◄── Reusable Workflows   │
-│                                                             │
-│  .github/workflows/ci.yml         ◄── Internal Workflows   │
-│           │                                                 │
-│           ▼                                                 │
-│  .github/workflows/auto-release.yml                         │
-│           │                                                 │
-│           └─────► calls release.yml                         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                       gha-toolkit Repository                        │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Reusable Workflows:                                                │
+│    go-base.yml, go.yml, node.yml,                                   │
+│    docker-build-push.yml, k8s-deploy.yml, release.yml               │
+│                                                                     │
+│  charts/app/  ◄── generic Helm chart, pulled by k8s-deploy.yml      │
+│               at the same git ref (toolkit-ref) the caller pinned   │
+│                                                                     │
+│  Internal Workflows:                                                │
+│    ci.yml (lint + validate-chart) ──► auto-release.yml ──► release.yml│
+│                                                                     │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ## Version Management
@@ -317,9 +487,17 @@ yamllint .github/workflows/*.yml
 # Test Markdown validation
 markdownlint *.md
 
+# Test the Helm chart (no cluster required)
+helm lint charts/app
+helm template charts/app --set image.repository=test --set image.tag=test
+
 # Test release (dry-run)
 npx semantic-release --dry-run
 ```
+
+`test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`,
+`docker-build-push.yml` (build-only) and `k8s-deploy.yml` (`--dry-run=client`) against this repo
+without needing real Go/Node projects, a registry, or a cluster.
 
 ### Integration Testing
 
@@ -333,14 +511,19 @@ npx semantic-release --dry-run
 
 1. **Caching:**
    - Go modules cached with `actions/cache`
+   - `node.yml` uses `actions/setup-node`'s native package-manager cache
    - Node modules cached in release workflow
 
 2. **Parallel Execution:**
    - Build and test run sequentially (dependency)
    - Multiple reusable workflows can run in parallel
+   - `docker-build-push.yml` and `k8s-deploy.yml` are separate workflows chained via `needs`, so a
+     project that only needs to build/push (no deploy) can skip the deploy job entirely
 
 3. **Resource Usage:**
-   - Uses `ubuntu-latest` (fastest runner)
+   - Every reusable workflow accepts a `runs-on` input (default `ubuntu-latest`, except
+     `k8s-deploy.yml` which defaults to `self-hosted`) — GitHub-hosted where possible, self-hosted
+     only where a private registry/cluster requires it
    - PostgreSQL as service container (lightweight)
 
 ## Monitoring
@@ -364,10 +547,12 @@ https://github.com/adnvilla/gha-toolkit/releases
 ### Potential Additions
 
 - Python project workflow
-- Node.js project workflow
-- Docker build workflow
-- Multi-platform testing
-- Security scanning integration
+- Multi-platform Docker builds (`docker buildx` + QEMU)
+- Security scanning integration (e.g. `gosec`, `trivy`)
+- Kustomize-style overlays or per-environment values presets in `charts/app` for promoting the same
+  image across `dev`/`staging`/`prod` without duplicating `values-<env>.yaml` files per project
+- Publishing `charts/app` as an OCI artifact (`helm push`) instead of a git checkout, once multiple
+  charts exist and a registry is worth the extra moving part
 
 ### Backward Compatibility
 

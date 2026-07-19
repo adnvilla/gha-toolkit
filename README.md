@@ -103,12 +103,83 @@ jobs:
 
 **Required configuration**: Copy `.releaserc.json.example` to your project as `.releaserc.json`
 
+### 3. Node Build and Test (`node.yml`)
+
+Install/build/lint/typecheck/test for Node.js/TypeScript projects (pnpm, npm or yarn), including
+monorepo/workspace layouts.
+
+**Usage**:
+
+```yaml
+jobs:
+  ci:
+    uses: adnvilla/gha-toolkit/.github/workflows/node.yml@v1.0.0
+    with:
+      node-version: '20'          # Optional, default: '20'
+      package-manager: 'pnpm'     # Optional, default: 'pnpm' (pnpm | npm | yarn)
+      run-build: true             # Optional, default: true
+      run-lint: true              # Optional, default: true
+      run-typecheck: true         # Optional, default: true
+      run-tests: true             # Optional, default: true
+```
+
+### 4. Docker Build and Push (`docker-build-push.yml`)
+
+Builds a Docker image and pushes it to a registry (public or a private/local insecure one), tagging
+it with the short commit SHA plus any extra tags. Outputs `image` so a following job can consume the
+exact ref that was built.
+
+**Usage**:
+
+```yaml
+jobs:
+  build:
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.0.0
+    with:
+      dockerfile: apps/web/Dockerfile
+      image-name: my-app
+      registry-host: registry.example.local:5001
+      verify-insecure-registry: true   # For local/self-hosted registries
+      runs-on: self-hosted
+```
+
+### 5. Kubernetes Deploy (`k8s-deploy.yml`)
+
+Deploys to Kubernetes via Helm using the generic chart shipped in this repo (`charts/app`), so
+consumers only need a small `values.yaml` instead of hand-written manifests. Runs
+`helm upgrade --install --create-namespace --wait --atomic`.
+
+**Usage** (chained after `docker-build-push.yml` via `needs`):
+
+```yaml
+jobs:
+  build:
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.0.0
+    with:
+      dockerfile: apps/web/Dockerfile
+      image-name: my-app
+      registry-host: registry.example.local:5001
+      runs-on: self-hosted
+
+  deploy:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@v1.0.0
+    with:
+      toolkit-ref: v1.0.0          # Same tag used above, pins the chart version
+      release-name: my-app
+      namespace: my-app
+      kube-context: local
+      values-file: k8s/values-local.yaml
+      image: ${{ needs.build.outputs.image }}
+```
+
+See `charts/app/README.md` for the full values reference, and `EXAMPLES.md` for a complete
+CI → build → deploy pipeline.
+
 ## 🚀 Future Workflows
 
-- **v1.1.0**: Node.js/TypeScript (npm, yarn, pnpm)
-- **v1.2.0**: Python (pytest, coverage, lint)
-- **v1.3.0**: Docker (multi-platform builds)
-- **v1.4.0**: Terraform (plan, apply, security scan)
+- Python (pytest, coverage, lint)
+- Terraform (plan, apply, security scan)
 
 Have an idea? Open an [issue](https://github.com/adnvilla/gha-toolkit/issues) or contribute following [CONTRIBUTING.md](CONTRIBUTING.md)
 

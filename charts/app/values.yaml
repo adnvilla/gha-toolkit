@@ -1,0 +1,67 @@
+# Default values for the generic `app` chart.
+# Every value here can be overridden per-project via a values-<env>.yaml file
+# living in the consumer repo (e.g. k8s/values-local.yaml) and passed to
+# `helm upgrade --install -f`.
+
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: ""
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Container port the app listens on.
+containerPort: 8080
+
+# List of { name, value } pairs injected as container env vars.
+env: []
+# - name: PORT
+#   value: "8080"
+
+# Optional list of envFrom sources (configMapRef/secretRef), passed through as-is.
+envFrom: []
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Raw pass-through blocks: set exactly what you'd put under a Pod spec.
+affinity: {}
+tolerations: []
+nodeSelector: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  # className: traefik
+  annotations: {}
+  host: ""
+  path: /
+  pathType: Prefix

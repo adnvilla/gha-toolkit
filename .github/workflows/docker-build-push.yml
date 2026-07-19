@@ -1,0 +1,133 @@
+# Reusable workflow to build a Docker image and push it to a registry
+# Works with GitHub-hosted runners against public registries, or with
+# self-hosted runners against a private/local insecure registry.
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Docker Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        description: 'Path to the Dockerfile'
+        required: true
+        type: string
+      context:
+        description: 'Docker build context'
+        required: false
+        type: string
+        default: '.'
+      image-name:
+        description: 'Image name, without registry host or tag (e.g. my-app)'
+        required: true
+        type: string
+      registry-host:
+        description: 'Registry host, e.g. ghcr.io/org or registry.example.local:5001'
+        required: true
+        type: string
+      extra-tags:
+        description: 'Additional tags to apply, one per line (short-sha is always added)'
+        required: false
+        type: string
+        default: 'latest'
+      build-args:
+        description: 'Build args, one KEY=VALUE per line'
+        required: false
+        type: string
+        default: ''
+      verify-insecure-registry:
+        description: 'Preflight-check that the Docker daemon can reach an insecure/local registry before building'
+        required: false
+        type: boolean
+        default: false
+      push:
+        description: >-
+          Push the built image(s). Set to false to only validate that the
+          image builds (e.g. in CI on a PR).
+        required: false
+        type: boolean
+        default: true
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+    outputs:
+      image:
+        description: 'Full image reference (registry-host/image-name:short-sha)'
+        value: ${{ jobs.build.outputs.image }}
+      short-sha:
+        description: 'The short commit SHA used as the primary tag'
+        value: ${{ jobs.build.outputs.short-sha }}
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      image: ${{ steps.tags.outputs.image }}
+      short-sha: ${{ steps.tags.outputs.short-sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute tags
+        id: tags
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE="${{ inputs.registry-host }}/${{ inputs.image-name }}"
+          {
+            echo "image=${IMAGE}:${SHORT_SHA}"
+            echo "short-sha=${SHORT_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify Docker daemon insecure-registries and registry connectivity
+        if: ${{ inputs.verify-insecure-registry && inputs.push }}
+        run: |
+          REGISTRY_HOST="${{ inputs.registry-host }}"
+          if ! docker info 2>/dev/null | grep -q "${REGISTRY_HOST}"; then
+            echo "::error::${REGISTRY_HOST} is not in Docker daemon insecure-registries."
+            exit 1
+          fi
+          ERR=$(docker pull "${REGISTRY_HOST}/__preflight__:none" 2>&1 || true)
+          if echo "$ERR" | grep -qE "connection refused|EOF|no such host|dial"; then
+            echo "::error::Docker daemon cannot reach ${REGISTRY_HOST}."
+            echo "$ERR"
+            exit 1
+          fi
+
+      - name: Build image
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+          REGISTRY_IMAGE: ${{ inputs.registry-host }}/${{ inputs.image-name }}
+          SHORT_SHA: ${{ steps.tags.outputs.short-sha }}
+          EXTRA_TAGS: ${{ inputs.extra-tags }}
+          BUILD_ARGS: ${{ inputs.build-args }}
+          DOCKERFILE: ${{ inputs.dockerfile }}
+          CONTEXT: ${{ inputs.context }}
+        run: |
+          TAG_ARGS=(-t "${REGISTRY_IMAGE}:${SHORT_SHA}")
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            TAG_ARGS+=(-t "${REGISTRY_IMAGE}:${tag}")
+          done <<< "$EXTRA_TAGS"
+
+          BUILD_ARG_ARGS=()
+          while IFS= read -r arg; do
+            [ -z "$arg" ] && continue
+            BUILD_ARG_ARGS+=(--build-arg "$arg")
+          done <<< "$BUILD_ARGS"
+
+          docker build -f "$DOCKERFILE" "${TAG_ARGS[@]}" "${BUILD_ARG_ARGS[@]}" "$CONTEXT"
+
+      - name: Push image
+        if: ${{ inputs.push }}
+        env:
+          REGISTRY_IMAGE: ${{ inputs.registry-host }}/${{ inputs.image-name }}
+          SHORT_SHA: ${{ steps.tags.outputs.short-sha }}
+          EXTRA_TAGS: ${{ inputs.extra-tags }}
+        run: |
+          docker push "${REGISTRY_IMAGE}:${SHORT_SHA}"
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker push "${REGISTRY_IMAGE}:${tag}"
+          done <<< "$EXTRA_TAGS"

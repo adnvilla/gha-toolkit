@@ -83,16 +83,21 @@ Then create a PR on GitHub with:
 
 ### Reusable Workflows
 
-Located in `.github/workflows/` with prefix indicating purpose:
+Located in `.github/workflows/`, one file per domain:
 
-- `go.yml`: Workflow for Go projects
-- `release.yml`: Workflow for semantic releases
+- `go-base.yml` / `go.yml`: Go projects (without / with PostgreSQL)
+- `node.yml`: Node.js/TypeScript projects (pnpm, npm or yarn)
+- `docker-build-push.yml`: Build and push a Docker image
+- `k8s-deploy.yml`: Deploy to Kubernetes via Helm, using `charts/app`
+- `release.yml`: Semantic releases
 
 **Requirements for reusable workflows:**
 1. Use `workflow_call` trigger
 2. Define clear `inputs` with descriptions
-3. Include usage examples in documentation
-4. Be generic (not specific to one project)
+3. Include a `runs-on` input (string, default `ubuntu-latest` unless the workflow inherently needs a
+   private network — e.g. `k8s-deploy.yml` defaults to `self-hosted`), so consumers can choose the runner
+4. Include usage examples in documentation
+5. Be generic (not specific to one project)
 
 ### Internal Workflows
 
@@ -134,6 +139,28 @@ jobs:
 3. Update `README.md` if necessary
 4. Create a PR with commit `feat: add workflow for X`
 
+## Modifying the Helm Chart (charts/app)
+
+`charts/app` is consumed by every project using `k8s-deploy.yml`, pinned to a specific
+`gha-toolkit` git ref via the `toolkit-ref` input — so changes here are versioned the same way as
+the workflows themselves:
+
+1. Prefer adding a new **optional** value with a backward-compatible default over changing the
+   meaning of an existing one
+2. Bump `charts/app/Chart.yaml`'s `version` whenever a template changes in a way consumers should
+   notice (new resource, changed default, renamed value) — this is a manual bump, there's no
+   automation for it yet
+3. Update `charts/app/README.md`'s values table
+4. Validate locally before opening a PR:
+
+```bash
+helm lint charts/app
+helm template charts/app --set image.repository=test --set image.tag=test
+```
+
+5. Renaming or removing a value, or changing a default in a way that changes rendered output, is a
+   **breaking change** — commit with `feat!:` and call it out in the PR description
+
 ## Validating Before PR
 
 ### YAML Validation
@@ -146,6 +173,13 @@ yamllint .github/workflows/*.yml
 
 ```bash
 markdownlint *.md
+```
+
+### Helm Chart Validation
+
+```bash
+helm lint charts/app
+helm template charts/app --set image.repository=test --set image.tag=test
 ```
 
 ## Versioning

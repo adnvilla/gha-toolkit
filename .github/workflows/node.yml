@@ -1,0 +1,134 @@
+# Reusable workflow for building and testing Node.js/TypeScript projects
+# Supports pnpm, npm and yarn (including workspace/monorepo layouts)
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Node Build and Test
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '20'
+      package-manager:
+        description: 'Package manager to use (pnpm, npm or yarn)'
+        required: false
+        type: string
+        default: 'pnpm'
+      pnpm-version:
+        description: 'pnpm version to use (only applies when package-manager is pnpm)'
+        required: false
+        type: string
+        default: '9.14.2'
+      install-args:
+        description: 'Extra arguments passed to the install command'
+        required: false
+        type: string
+        default: '--frozen-lockfile'
+      run-build:
+        description: 'Whether to run the build script'
+        required: false
+        type: boolean
+        default: true
+      run-lint:
+        description: 'Whether to run the lint script'
+        required: false
+        type: boolean
+        default: true
+      run-typecheck:
+        description: 'Whether to run the typecheck script'
+        required: false
+        type: boolean
+        default: true
+      run-tests:
+        description: 'Whether to run the test script'
+        required: false
+        type: boolean
+        default: true
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        if: ${{ inputs.package-manager == 'pnpm' }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ inputs.pnpm-version }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+
+      - name: Install dependencies (pnpm)
+        if: >-
+          ${{ inputs.package-manager == 'pnpm' && (inputs.run-build ||
+          inputs.run-lint || inputs.run-typecheck || inputs.run-tests) }}
+        run: pnpm install ${{ inputs.install-args }}
+
+      - name: Install dependencies (npm)
+        if: >-
+          ${{ inputs.package-manager == 'npm' && (inputs.run-build ||
+          inputs.run-lint || inputs.run-typecheck || inputs.run-tests) }}
+        run: npm ci ${{ inputs.install-args }}
+
+      - name: Install dependencies (yarn)
+        if: >-
+          ${{ inputs.package-manager == 'yarn' && (inputs.run-build ||
+          inputs.run-lint || inputs.run-typecheck || inputs.run-tests) }}
+        run: yarn install ${{ inputs.install-args }}
+
+      - name: Build
+        if: ${{ inputs.run-build }}
+        run: |
+          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+            pnpm -r run build
+          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+            npm run build --workspaces --if-present
+          else
+            yarn workspaces run build
+          fi
+
+      - name: Lint
+        if: ${{ inputs.run-lint }}
+        run: |
+          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+            pnpm -r run lint
+          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+            npm run lint --workspaces --if-present
+          else
+            yarn workspaces run lint
+          fi
+
+      - name: Typecheck
+        if: ${{ inputs.run-typecheck }}
+        run: |
+          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+            pnpm -r run typecheck
+          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+            npm run typecheck --workspaces --if-present
+          else
+            yarn workspaces run typecheck
+          fi
+
+      - name: Test
+        if: ${{ inputs.run-tests }}
+        run: |
+          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+            pnpm -r run test
+          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+            npm run test --workspaces --if-present
+          else
+            yarn workspaces run test
+          fi

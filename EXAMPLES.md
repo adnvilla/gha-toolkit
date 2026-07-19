@@ -193,6 +193,120 @@ jobs:
       go-version: ${{ matrix.go-version }}
 ```
 
+## Example 8: Node.js Monorepo with Docker + Kubernetes Deploy (self-hosted)
+
+Full CI/CD pipeline for a pnpm monorepo (e.g. a Next.js app) that builds a Docker image and deploys
+it to a self-hosted k3s cluster — mirrors what `navi-admin` runs today, but as three chained calls
+instead of ~150 lines of inline YAML.
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: adnvilla/gha-toolkit/.github/workflows/node.yml@v1.0.0
+    with:
+      node-version: '20'
+      package-manager: 'pnpm'
+```
+
+```yaml
+# .github/workflows/cd.yml
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      kube_context:
+        description: 'kubectl context to deploy to'
+        required: true
+        default: local
+        type: choice
+        options: [local, raspi-k3s]
+
+jobs:
+  build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.0.0
+    with:
+      dockerfile: apps/web/Dockerfile
+      image-name: my-app-web
+      registry-host: registry.example.local:5001
+      verify-insecure-registry: true
+      runs-on: self-hosted
+
+  deploy:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@v1.0.0
+    with:
+      toolkit-ref: v1.0.0   # same tag used above, pins charts/app to that version
+      release-name: my-app-web
+      namespace: my-app
+      kube-context: ${{ github.event.inputs.kube_context || 'local' }}
+      values-file: k8s/values-local.yaml
+      image: ${{ needs.build.outputs.image }}
+```
+
+```yaml
+# k8s/values-local.yaml — replaces hand-written deployment.yml/service.yml/ingress.yml
+fullnameOverride: my-app-web
+
+containerPort: 3000
+
+env:
+  - name: HOSTNAME
+    value: "0.0.0.0"
+  - name: PORT
+    value: "3000"
+
+service:
+  targetPort: 3000
+
+# Probe ports don't inherit containerPort automatically — override them too
+livenessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 30
+readinessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+ingress:
+  enabled: true
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+  host: my-app.local
+
+# Keep pods off the control-plane node if it isn't configured to pull from the local registry
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: DoesNotExist
+```
+
+See `charts/app/README.md` for the full list of values you can override this way.
+
 ## Important Notes
 
 ### Permissions

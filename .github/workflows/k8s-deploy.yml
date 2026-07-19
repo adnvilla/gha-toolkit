@@ -1,0 +1,159 @@
+# Reusable workflow to deploy an application to Kubernetes via Helm, using the
+# generic chart shipped in this repo (charts/app) unless the caller opts into
+# its own chart. Assumes the runner already has a working kubeconfig with the
+# requested context configured (see ARCHITECTURE.md > Self-hosted runner prerequisites).
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Kubernetes Deploy
+
+on:
+  workflow_call:
+    inputs:
+      toolkit-ref:
+        description: >-
+          Git ref of adnvilla/gha-toolkit to pull charts/app from. Set this to the same
+          tag used in this workflow's `uses:` line (e.g. 'v1.4.0') so the chart version
+          matches the workflow version. Ignored when use-local-chart is true.
+        required: true
+        type: string
+      use-local-chart:
+        description: 'Use a chart from the calling repo instead of charts/app from gha-toolkit'
+        required: false
+        type: boolean
+        default: false
+      chart-path:
+        description: >-
+          Path to the Helm chart (relative to gha-toolkit, or to the calling
+          repo when use-local-chart is true)
+        required: false
+        type: string
+        default: 'charts/app'
+      release-name:
+        description: 'Helm release name'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace (created automatically if missing)'
+        required: true
+        type: string
+      kube-context:
+        description: 'kubectl context to deploy to'
+        required: true
+        type: string
+      values-file:
+        description: 'Path to the values file in the calling repo (e.g. k8s/values-local.yaml)'
+        required: true
+        type: string
+      image:
+        description: 'Full image reference, e.g. registry.example.local:5001/my-app:abc1234'
+        required: true
+        type: string
+      helm-set:
+        description: 'Additional --set overrides, one KEY=VALUE per line'
+        required: false
+        type: string
+        default: ''
+      wait:
+        description: 'Wait for resources to become ready'
+        required: false
+        type: boolean
+        default: true
+      atomic:
+        description: 'Roll back automatically if the upgrade fails'
+        required: false
+        type: boolean
+        default: true
+      timeout:
+        description: 'Time to wait for the rollout, e.g. 180s'
+        required: false
+        type: string
+        default: '180s'
+      helm-version:
+        description: 'Helm version to install if not already present on the runner'
+        required: false
+        type: string
+        default: 'v3.16.2'
+      dry-run:
+        description: >-
+          Render the chart client-side (helm --dry-run=client) instead of deploying.
+          No kube-context/cluster access is required in this mode.
+        required: false
+        type: boolean
+        default: false
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'self-hosted'
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout gha-toolkit chart
+        if: ${{ !inputs.use-local-chart }}
+        uses: actions/checkout@v4
+        with:
+          repository: adnvilla/gha-toolkit
+          ref: ${{ inputs.toolkit-ref }}
+          path: .gha-toolkit-chart
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ inputs.helm-version }}
+
+      - name: Select kube context
+        if: ${{ !inputs.dry-run }}
+        run: |
+          kubectl config use-context "${{ inputs.kube-context }}"
+          kubectl cluster-info
+
+      - name: Deploy with Helm
+        env:
+          USE_LOCAL_CHART: ${{ inputs.use-local-chart }}
+          CHART_PATH: ${{ inputs.chart-path }}
+          RELEASE_NAME: ${{ inputs.release-name }}
+          NAMESPACE: ${{ inputs.namespace }}
+          VALUES_FILE: ${{ inputs.values-file }}
+          IMAGE: ${{ inputs.image }}
+          HELM_SET: ${{ inputs.helm-set }}
+          WAIT: ${{ inputs.wait }}
+          ATOMIC: ${{ inputs.atomic }}
+          TIMEOUT: ${{ inputs.timeout }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "${USE_LOCAL_CHART}" == "true" ]; then
+            CHART_DIR="${CHART_PATH}"
+          else
+            CHART_DIR=".gha-toolkit-chart/${CHART_PATH}"
+          fi
+
+          IMAGE_REPO="${IMAGE%:*}"
+          IMAGE_TAG="${IMAGE##*:}"
+
+          ARGS=(
+            upgrade --install "${RELEASE_NAME}" "${CHART_DIR}"
+            -n "${NAMESPACE}" --create-namespace
+            -f "${VALUES_FILE}"
+            --set "image.repository=${IMAGE_REPO}"
+            --set "image.tag=${IMAGE_TAG}"
+            --timeout "${TIMEOUT}"
+          )
+
+          if [ "${DRY_RUN}" == "true" ]; then
+            ARGS+=(--dry-run=client)
+          else
+            [ "${WAIT}" == "true" ] && ARGS+=(--wait)
+            [ "${ATOMIC}" == "true" ] && ARGS+=(--atomic)
+          fi
+
+          while IFS= read -r kv; do
+            [ -z "$kv" ] && continue
+            ARGS+=(--set "$kv")
+          done <<< "${HELM_SET}"
+
+          helm "${ARGS[@]}"

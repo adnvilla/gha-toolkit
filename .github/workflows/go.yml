@@ -37,10 +37,15 @@ on:
         required: false
         type: string
         default: 'host=localhost user=postgres password=postgres dbname=postgres port=5432 sslmode=disable'
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     services:
       postgres:
         image: postgres:${{ inputs.postgres-version }}
