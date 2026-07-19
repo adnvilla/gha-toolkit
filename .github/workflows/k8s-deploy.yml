@@ -132,13 +132,13 @@ jobs:
       url: ${{ inputs.environment-url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
 
       - name: Checkout gha-toolkit chart
         if: ${{ !inputs.use-local-chart }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ inputs.toolkit-ref || job.workflow_sha }}

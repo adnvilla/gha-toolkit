@@ -93,7 +93,7 @@ jobs:
       short-sha: ${{ steps.tags.outputs.short-sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
 
