@@ -38,3 +38,14 @@ Selector labels.
 app.kubernetes.io/name: {{ include "app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
+
+{{/*
+ServiceAccount name: explicit override, else fullname when create is true, else "default".
+*/}}
+{{- define "app.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+{{- default (include "app.fullname" .) .Values.serviceAccount.name -}}
+{{- else -}}
+{{- default "default" .Values.serviceAccount.name -}}
+{{- end -}}
+{{- end -}}

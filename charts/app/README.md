@@ -46,10 +46,25 @@ context selection and image parsing for you.
 | `ingress.annotations` | `{}` | Ingress annotations (e.g. Traefik entrypoints) |
 | `ingress.host` | `""` | Ingress host |
 | `ingress.path` / `ingress.pathType` | `/` / `Prefix` | Ingress rule path |
+| `serviceAccount.create` | `false` | Create a ServiceAccount and mount it on pods |
+| `serviceAccount.name` | `""` | SA name override (defaults to fullname when create is true) |
+| `serviceAccount.annotations` | `{}` | SA annotations (e.g. workload identity) |
+| `serviceAccount.automountServiceAccountToken` | `true` | Automount the SA token into pods |
+| `autoscaling.enabled` | `false` | Render an HPA (and omit Deployment `replicas`) |
+| `autoscaling.minReplicas` / `maxReplicas` | `1` / `3` | HPA replica bounds |
+| `autoscaling.targetCPUUtilizationPercentage` | `80` | CPU target; set `targetMemoryUtilizationPercentage` for memory |
+| `podDisruptionBudget.enabled` | `false` | Render a PodDisruptionBudget |
+| `podDisruptionBudget.minAvailable` | `1` | Min available pods (preferred over `maxUnavailable` if both set) |
+| `networkPolicy.enabled` | `false` | Render a NetworkPolicy selecting the app pods |
+| `networkPolicy.allowSameNamespace` | `true` | Allow ingress from any pod in the same namespace to `service.port` |
+| `networkPolicy.extraIngress` / `egress` | `[]` / `[]` | Extra ingress rules / egress rules (pass-through) |
 
 `probes`, `affinity`, `tolerations`, `resources` and `env`/`envFrom` are intentionally raw
 pass-through blocks (`toYaml` straight from `values.yaml`) so project-specific quirks — like
 avoiding a control-plane node — don't require chart changes, only a values override.
+
+Optional resources (`serviceAccount`, `autoscaling`, `podDisruptionBudget`, `networkPolicy`) default
+to off so existing consumers see no behavior change — enable them in your values file when needed.
 
 **Gotcha:** if you override `containerPort` (or `service.targetPort`), also override
 `livenessProbe`/`readinessProbe`'s `port` to match — they default to `8080` independently and are

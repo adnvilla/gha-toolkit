@@ -65,3 +65,35 @@ ingress:
   host: ""
   path: /
   pathType: Prefix
+
+# Opt-in resources (default off — existing consumers see no change).
+serviceAccount:
+  # Create a ServiceAccount and mount it on the Deployment pods.
+  create: false
+  # Optional explicit name; defaults to the chart fullname when create is true.
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: true
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: false
+  # Set exactly one of minAvailable / maxUnavailable (minAvailable wins if both set).
+  minAvailable: 1
+  # maxUnavailable: 1
+
+networkPolicy:
+  enabled: false
+  # When true, allow ingress from any pod in the same namespace to the Service port.
+  allowSameNamespace: true
+  # Extra ingress rules, passed through as-is under spec.ingress.
+  extraIngress: []
+  # Egress: empty = allow all (no egress rules rendered). Set to restrict.
+  # Use [{ }] for "allow all egress" explicitly, or concrete rules.
+  egress: []

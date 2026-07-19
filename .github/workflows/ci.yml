@@ -61,6 +61,17 @@ jobs:
             --set ingress.enabled=true \
             --set ingress.host=test.local > /dev/null
 
+      - name: Render chart with optional resources enabled
+        run: |
+          # Catch template errors in SA/HPA/PDB/NetworkPolicy (all default-off).
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=test \
+            --set serviceAccount.create=true \
+            --set autoscaling.enabled=true \
+            --set podDisruptionBudget.enabled=true \
+            --set networkPolicy.enabled=true > /dev/null
+
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest
