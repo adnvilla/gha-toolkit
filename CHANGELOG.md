@@ -1,3 +1,5 @@
+## [1.5.0](https://github.com/adnvilla/gha-toolkit/compare/v1.4.1...v1.5.0) (2026-07-20)
+
 ## [1.4.1](https://github.com/adnvilla/gha-toolkit/compare/v1.4.0...v1.4.1) (2026-07-20)
 
 ## [1.4.0](https://github.com/adnvilla/gha-toolkit/compare/v1.3.5...v1.4.0) (2026-07-20)
