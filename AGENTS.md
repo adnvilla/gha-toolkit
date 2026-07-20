@@ -93,12 +93,16 @@ markdownlint README.md --config .markdownlint.json
 ### The doc-version-pin gate (easy to miss)
 
 `ci.yml`'s `validate-doc-pins` job greps `README.md`, `EXAMPLES.md`, and `ENVIRONMENTS.md` for every
-`adnvilla/gha-toolkit/.github/workflows/<file>.yml@<ref>` pin and **fails the build unless that file
-exists at that git ref** (tag or `origin/<branch>`). Consequences for you:
+`adnvilla/gha-toolkit/.github/workflows/<file>.yml@<ref>` pin and **fails the build unless the file
+resolves for that pin**. The rule depends on whether the ref is a version/tag or a branch:
 
-- Don't reference a workflow file/path in those docs that doesn't exist at the pinned ref.
-- When you add a new reusable workflow, examples referencing it must pin a ref where the file actually
-  exists — use `@master` in docs until a tag ships it, then bump. A pin to an unreleased `@vX.Y.Z` fails CI.
+- **Version/tag pins** (e.g. `@v1.5.0`, `@1.5.0`) are validated strictly against that exact ref, so a
+  consumer copying the example never gets a broken `uses:`. Documenting an unreleased `@vX.Y.Z` fails CI.
+- **Branch pins** (e.g. `@master`) mean "latest": the file only needs to exist in the code under review
+  (`HEAD`). This lets you add a new reusable workflow **and** its `@master` examples in a single PR —
+  after merge, the branch contains the file. Use `@master` in docs until a tag ships it, then bump.
+- Don't reference a workflow file/path that doesn't exist anywhere (typos in the path still fail, since
+  they're absent from `HEAD` and every ref).
 - Renaming or deleting a workflow file breaks every doc pin that referenced its old path.
 
 Reproduce the check locally:
@@ -106,7 +110,8 @@ Reproduce the check locally:
 ```bash
 grep -ohE 'adnvilla/gha-toolkit/\.github/workflows/[A-Za-z0-9_-]+\.yml@[A-Za-z0-9._/-]+' \
   README.md EXAMPLES.md ENVIRONMENTS.md | sort -u
-# then confirm each `path@ref` resolves via `git show <ref>:<path>` or `git show origin/<ref>:<path>`
+# For tag pins confirm `git show <tag>:<path>`; for branch pins (e.g. @master) a match in the current
+# tree (`git show HEAD:<path>`) or `git show origin/<branch>:<path>` is enough.
 ```
 
 ## 5. Manual / end-to-end testing
