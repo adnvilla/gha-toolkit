@@ -175,6 +175,45 @@ on:
 - Uses `actions/setup-node`'s built-in cache instead of manually caching the pnpm store (simpler than
   a hand-rolled `actions/cache` step)
 
+### rust.yml
+
+**Purpose:** CI pipeline for Rust projects (e.g. REST API services) — format, lint, build and test,
+with an optional PostgreSQL service container for integration tests.
+
+**Trigger:**
+```yaml
+on:
+  workflow_call:
+```
+
+**Inputs:**
+- `rust-version` (string): toolchain to install (default: `stable`)
+- `components` (string): rustup components (default: `rustfmt, clippy`)
+- `run-fmt` / `run-clippy` / `run-build` / `run-tests` (boolean): each independently toggleable (default: true)
+- `clippy-args` (string): args for `cargo clippy` (default: `--all-targets --all-features -- -D warnings`)
+- `build-flags` / `test-flags` (string): extra flags for `cargo build`/`cargo test` (default: `--verbose`)
+- `postgres-enabled` (boolean): start a PostgreSQL container (default: false)
+- `postgres-version` (string): PostgreSQL version (default: `15`)
+- `database-url` (string): `DATABASE_URL` exposed to the test step (default:
+  `postgres://postgres:postgres@localhost:5432/postgres`)
+- `runs-on` (string, default `ubuntu-latest`)
+
+**Jobs:**
+
+1. **build:**
+   - `actions-rust-lang/setup-rust-toolchain@v1` with the requested toolchain/components and built-in
+     cargo caching (`cache: true`)
+   - Optionally starts PostgreSQL (see Design Decisions) and waits for `pg_isready`
+   - Runs `cargo fmt --all --check`, `cargo clippy`, `cargo build` and `cargo test` — each gated by its
+     `run-*` input; the test step exports `DATABASE_URL`
+
+**Design Decisions:**
+- PostgreSQL is started with a conditional `docker run` step instead of a `services:` container:
+  GitHub Actions can't conditionally enable/disable a service container with an expression, so a
+  docker-run step keeps the database truly *opt-in* (default off) within a single workflow file
+- Uses `actions-rust-lang/setup-rust-toolchain@v1` (semver-pinnable to `@v1`, unlike toolchain-tagged
+  actions) which bundles cargo caching, so no hand-rolled `actions/cache` step is needed
+
 ### docker-build-push.yml
 
 **Purpose:** Builds a Docker image and optionally pushes it to a registry — public (ghcr.io, Docker
@@ -396,7 +435,7 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  .github/workflows/ci.yml                                          │
-│    uses: gha-toolkit/.github/workflows/{go,go-base,node}.yml@v1.x  │
+│    uses: .../{go,go-base,node,rust}.yml@v1.x                      │
 │                                                                     │
 │  .github/workflows/cd.yml                                          │
 │    build:  uses: .../docker-build-push.yml@v1.x                    │
@@ -415,7 +454,7 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  Reusable Workflows:                                                │
-│    go-base.yml, go.yml, node.yml,                                   │
+│    go-base.yml, go.yml, node.yml, rust.yml,                         │
 │    docker-build-push.yml, k8s-deploy.yml, release.yml               │
 │                                                                     │
 │  charts/app/  ◄── generic Helm chart, pulled by k8s-deploy.yml      │
@@ -540,9 +579,9 @@ helm template charts/app --set image.repository=test --set image.tag=test
 npx semantic-release --dry-run
 ```
 
-`test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`,
+`test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`, `rust.yml`,
 `docker-build-push.yml` (build-only) and `k8s-deploy.yml` (`helm template` dry-run) against this repo
-without needing real Go/Node projects, a registry, or a cluster. The docker and k8s smoke jobs pass an
+without needing real Go/Node/Rust projects, a registry, or a cluster. The docker and k8s smoke jobs pass an
 explicit `ref: ${{ github.sha }}`; docker has a follow-up job asserting `outputs.short-sha` matches
 that ref. `adopt-existing` is **not** covered by `test.yml` — it is skipped under `dry-run` and needs
 a disposable cluster/namespace for a real run (validate manually when changing it).
@@ -560,6 +599,7 @@ a disposable cluster/namespace for a real run (validate manually when changing i
 1. **Caching:**
    - Go modules cached with `actions/cache`
    - `node.yml` uses `actions/setup-node`'s native package-manager cache
+   - `rust.yml` uses `actions-rust-lang/setup-rust-toolchain`'s built-in cargo cache
    - Node modules cached in release workflow
 
 2. **Parallel Execution:**

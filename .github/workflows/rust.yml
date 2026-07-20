@@ -1,0 +1,133 @@
+# Reusable workflow for building and testing Rust projects (e.g. REST API services)
+# Runs fmt/clippy/build/test with an optional PostgreSQL service for integration tests.
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Rust Build and Test
+
+on:
+  workflow_call:
+    inputs:
+      rust-version:
+        description: 'Rust toolchain to install (e.g. stable, 1.83.0, nightly)'
+        required: false
+        type: string
+        default: 'stable'
+      components:
+        description: 'Rustup components to install (comma-separated)'
+        required: false
+        type: string
+        default: 'rustfmt, clippy'
+      run-fmt:
+        description: 'Whether to run cargo fmt --check'
+        required: false
+        type: boolean
+        default: true
+      run-clippy:
+        description: 'Whether to run cargo clippy'
+        required: false
+        type: boolean
+        default: true
+      run-build:
+        description: 'Whether to run cargo build'
+        required: false
+        type: boolean
+        default: true
+      run-tests:
+        description: 'Whether to run cargo test'
+        required: false
+        type: boolean
+        default: true
+      clippy-args:
+        description: 'Arguments passed to cargo clippy'
+        required: false
+        type: string
+        default: '--all-targets --all-features -- -D warnings'
+      build-flags:
+        description: 'Additional flags for cargo build'
+        required: false
+        type: string
+        default: '--verbose'
+      test-flags:
+        description: 'Additional flags for cargo test'
+        required: false
+        type: string
+        default: '--verbose'
+      postgres-enabled:
+        description: 'Start a PostgreSQL container for integration tests'
+        required: false
+        type: boolean
+        default: false
+      postgres-version:
+        description: 'PostgreSQL version to use (only when postgres-enabled is true)'
+        required: false
+        type: string
+        default: '15'
+      database-url:
+        description: 'DATABASE_URL exposed to the test step (only when postgres-enabled is true)'
+        required: false
+        type: string
+        default: 'postgres://postgres:postgres@localhost:5432/postgres'
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ inputs.rust-version }}
+          components: ${{ inputs.components }}
+          cache: true
+
+      # GitHub Actions can't conditionally enable a `services:` container, so a
+      # docker run keeps PostgreSQL truly opt-in for projects that don't need it.
+      - name: Start PostgreSQL
+        if: ${{ inputs.postgres-enabled }}
+        env:
+          POSTGRES_VERSION: ${{ inputs.postgres-version }}
+        run: |
+          docker run -d --name postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=postgres \
+            -p 5432:5432 \
+            "postgres:${POSTGRES_VERSION}"
+          for i in $(seq 1 30); do
+            if docker exec postgres pg_isready -U postgres > /dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::PostgreSQL did not become ready in time"
+          exit 1
+
+      - name: Format
+        if: ${{ inputs.run-fmt }}
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        if: ${{ inputs.run-clippy }}
+        env:
+          CLIPPY_ARGS: ${{ inputs.clippy-args }}
+        run: cargo clippy ${CLIPPY_ARGS}
+
+      - name: Build
+        if: ${{ inputs.run-build }}
+        env:
+          BUILD_FLAGS: ${{ inputs.build-flags }}
+        run: cargo build ${BUILD_FLAGS}
+
+      - name: Test
+        if: ${{ inputs.run-tests }}
+        env:
+          DATABASE_URL: ${{ inputs.database-url }}
+          TEST_FLAGS: ${{ inputs.test-flags }}
+        run: cargo test ${TEST_FLAGS}
