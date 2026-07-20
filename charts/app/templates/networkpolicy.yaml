@@ -1,4 +1,5 @@
 {{- if .Values.networkPolicy.enabled -}}
+{{- $mode := include "app.strategyMode" . -}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -8,7 +9,12 @@ metadata:
 spec:
   podSelector:
     matchLabels:
+      {{- /* name-only for canary/blueGreen so all tracks/slots are covered */ -}}
+      {{- if or (eq $mode "canary") (eq $mode "blueGreen") }}
+      app.kubernetes.io/name: {{ include "app.name" . }}
+      {{- else }}
       {{- include "app.selectorLabels" . | nindent 6 }}
+      {{- end }}
   policyTypes:
     - Ingress
     {{- if .Values.networkPolicy.egress }}

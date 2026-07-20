@@ -89,7 +89,9 @@ Located in `.github/workflows/`, one file per domain:
 - `node.yml`: Node.js/TypeScript projects (pnpm, npm or yarn)
 - `rust.yml`: Rust projects (fmt/clippy/build/test, optional PostgreSQL)
 - `docker-build-push.yml`: Build and push a Docker image
-- `k8s-deploy.yml`: Deploy to Kubernetes via Helm, using `charts/app`
+- `k8s-deploy.yml`: Rolling deploy to Kubernetes via Helm (`charts/app`)
+- `k8s-canary.yml`: Canary deploy phases for HTTP APIs (`deploy` / `promote` / `abort`)
+- `k8s-bluegreen.yml`: Blue/green slot cutover for workers (`deploy` / `promote` / `abort`)
 - `release.yml`: Semantic releases
 
 **Requirements for reusable workflows:**

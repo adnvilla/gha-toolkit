@@ -1,0 +1,348 @@
+# Reusable workflow for canary deployments of HTTP APIs via Helm (charts/app).
+# Phases are explicit: deploy (ship canary) → promote | abort.
+# Assumes the runner has a working kubeconfig (see ARCHITECTURE.md).
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Kubernetes Canary Deploy
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: 'Canary phase: deploy (roll out canary), promote (make canary stable), or abort'
+        required: true
+        type: string
+      toolkit-ref:
+        description: >-
+          Optional override for the git ref of adnvilla/gha-toolkit to pull charts/app from.
+          Defaults to job.workflow_sha. Ignored when use-local-chart is true.
+        required: false
+        type: string
+        default: ''
+      ref:
+        description: >-
+          Git ref/SHA of the calling repo to check out (for the values file). Pass
+          github.event.workflow_run.head_sha explicitly for workflow_run-triggered CD.
+        required: false
+        type: string
+        default: ''
+      use-local-chart:
+        description: 'Use a chart from the calling repo instead of charts/app from gha-toolkit'
+        required: false
+        type: boolean
+        default: false
+      chart-path:
+        description: 'Path to the Helm chart'
+        required: false
+        type: string
+        default: 'charts/app'
+      release-name:
+        description: 'Helm release name'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace (created automatically if missing)'
+        required: true
+        type: string
+      kube-context:
+        description: 'kubectl context to deploy to'
+        required: true
+        type: string
+      values-file:
+        description: 'Path to the values file in the calling repo'
+        required: true
+        type: string
+      image:
+        description: >-
+          Full image reference for the canary (action=deploy) or the image to promote to
+          stable (action=promote). Ignored for abort unless you also pass stable-image.
+        required: false
+        type: string
+        default: ''
+      stable-image:
+        description: >-
+          Optional full image reference for the stable Deployment. When empty on deploy,
+          the workflow keeps the release's current image (or uses image if no release yet).
+        required: false
+        type: string
+        default: ''
+      canary-weight:
+        description: 'Traffic % to canary when canary.trafficProvider=traefik (0–100)'
+        required: false
+        type: number
+        default: 10
+      canary-replicas:
+        description: 'Canary Deployment replicas on deploy'
+        required: false
+        type: number
+        default: 1
+      helm-set:
+        description: 'Additional --set overrides, one KEY=VALUE per line'
+        required: false
+        type: string
+        default: ''
+      wait:
+        description: 'Wait for resources to become ready'
+        required: false
+        type: boolean
+        default: true
+      atomic:
+        description: 'Roll back automatically if the upgrade fails'
+        required: false
+        type: boolean
+        default: true
+      timeout:
+        description: 'Time to wait for the rollout, e.g. 180s'
+        required: false
+        type: string
+        default: '180s'
+      helm-version:
+        description: 'Helm version to install if not already present on the runner'
+        required: false
+        type: string
+        default: 'v3.16.2'
+      dry-run:
+        description: 'Render with helm template instead of deploying (no cluster access)'
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'GitHub Environment name for this job'
+        required: false
+        type: string
+        default: 'production'
+      environment-url:
+        description: 'Optional URL shown next to the environment in the GitHub Actions UI'
+        required: false
+        type: string
+        default: ''
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'self-hosted'
+    outputs:
+      action:
+        description: 'Action that was executed'
+        value: ${{ jobs.canary.outputs.action }}
+      image:
+        description: 'Canary or promoted image reference'
+        value: ${{ jobs.canary.outputs.image }}
+      stable-image:
+        description: 'Stable image reference after this run'
+        value: ${{ jobs.canary.outputs.stable-image }}
+
+jobs:
+  canary:
+    runs-on: ${{ inputs.runs-on }}
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.environment-url }}
+    outputs:
+      action: ${{ steps.deploy.outputs.action }}
+      image: ${{ steps.deploy.outputs.image }}
+      stable-image: ${{ steps.deploy.outputs.stable-image }}
+    steps:
+      - name: Validate action
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          case "${ACTION}" in
+            deploy|promote|abort) ;;
+            *)
+              echo "::error::action must be deploy, promote, or abort (got '${ACTION}')"
+              exit 1
+              ;;
+          esac
+          if [ "${ACTION}" != "abort" ] && [ -z "${{ inputs.image }}" ]; then
+            echo "::error::image is required for action=${ACTION}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Checkout gha-toolkit chart
+        if: ${{ !inputs.use-local-chart }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.toolkit-ref || job.workflow_sha }}
+          path: .gha-toolkit-chart
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ inputs.helm-version }}
+
+      - name: Select kube context
+        if: ${{ !inputs.dry-run }}
+        run: |
+          kubectl config use-context "${{ inputs.kube-context }}"
+          kubectl cluster-info
+
+      - name: Deploy canary phase
+        id: deploy
+        env:
+          USE_LOCAL_CHART: ${{ inputs.use-local-chart }}
+          CHART_PATH: ${{ inputs.chart-path }}
+          RELEASE_NAME: ${{ inputs.release-name }}
+          NAMESPACE: ${{ inputs.namespace }}
+          VALUES_FILE: ${{ inputs.values-file }}
+          IMAGE: ${{ inputs.image }}
+          STABLE_IMAGE_INPUT: ${{ inputs.stable-image }}
+          ACTION: ${{ inputs.action }}
+          CANARY_WEIGHT: ${{ inputs.canary-weight }}
+          CANARY_REPLICAS: ${{ inputs.canary-replicas }}
+          HELM_SET: ${{ inputs.helm-set }}
+          WAIT: ${{ inputs.wait }}
+          ATOMIC: ${{ inputs.atomic }}
+          TIMEOUT: ${{ inputs.timeout }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+
+          if [ "${USE_LOCAL_CHART}" == "true" ]; then
+            CHART_DIR="${CHART_PATH}"
+          else
+            CHART_DIR=".gha-toolkit-chart/${CHART_PATH}"
+          fi
+
+          # Tiny helpers (heredoc bodies share run-block indent so YAML strips cleanly).
+          read_image_fields() {
+            # stdin: helm values JSON; args: top-level key ("image" or "canary")
+            local key="$1"
+            python3 - "$key" <<'PY'
+          import json, sys
+          key = sys.argv[1]
+          v = json.load(sys.stdin)
+          if key == "canary":
+              img = ((v.get("canary") or {}).get("image")) or {}
+          else:
+              img = v.get("image") or {}
+          print(img.get("repository") or "")
+          print(img.get("tag") or "")
+          PY
+          }
+
+          # Resolve stable image: explicit input > current release > canary image (first install).
+          STABLE_IMAGE="${STABLE_IMAGE_INPUT}"
+          if [ -z "${STABLE_IMAGE}" ] && [ "${DRY_RUN}" != "true" ]; then
+            if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+              {
+                read -r CUR_REPO
+                read -r CUR_TAG
+              } < <(helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json \
+                | read_image_fields image)
+              if [ -n "${CUR_REPO}" ] && [ -n "${CUR_TAG}" ]; then
+                STABLE_IMAGE="${CUR_REPO}:${CUR_TAG}"
+              fi
+            fi
+          fi
+          if [ -z "${STABLE_IMAGE}" ]; then
+            STABLE_IMAGE="${IMAGE}"
+          fi
+
+          STABLE_REPO="${STABLE_IMAGE%:*}"
+          STABLE_TAG="${STABLE_IMAGE##*:}"
+
+          CANARY_REPO=""
+          CANARY_TAG=""
+          if [ -n "${IMAGE}" ]; then
+            CANARY_REPO="${IMAGE%:*}"
+            CANARY_TAG="${IMAGE##*:}"
+          fi
+
+          RENDER_ARGS=(
+            -n "${NAMESPACE}"
+            -f "${VALUES_FILE}"
+            --set "strategy.mode=canary"
+            --set "image.repository=${STABLE_REPO}"
+            --set "image.tag=${STABLE_TAG}"
+          )
+
+          case "${ACTION}" in
+            deploy)
+              RENDER_ARGS+=(
+                --set "canary.image.repository=${CANARY_REPO}"
+                --set "canary.image.tag=${CANARY_TAG}"
+                --set "canary.replicas=${CANARY_REPLICAS}"
+                --set "canary.weight=${CANARY_WEIGHT}"
+              )
+              OUT_IMAGE="${IMAGE}"
+              OUT_STABLE="${STABLE_IMAGE}"
+              ;;
+            promote)
+              # Canary becomes the new stable; scale canary down and clear weight.
+              RENDER_ARGS+=(
+                --set "image.repository=${CANARY_REPO}"
+                --set "image.tag=${CANARY_TAG}"
+                --set "canary.image.repository=${CANARY_REPO}"
+                --set "canary.image.tag=${CANARY_TAG}"
+                --set "canary.replicas=0"
+                --set "canary.weight=0"
+              )
+              OUT_IMAGE="${IMAGE}"
+              OUT_STABLE="${IMAGE}"
+              ;;
+            abort)
+              # Keep stable; tear down canary. Prefer canary image from release if present.
+              if [ -z "${CANARY_REPO}" ] && [ "${DRY_RUN}" != "true" ]; then
+                if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+                  {
+                    read -r CANARY_REPO
+                    read -r CANARY_TAG
+                  } < <(helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json \
+                    | read_image_fields canary)
+                fi
+              fi
+              if [ -z "${CANARY_REPO}" ]; then
+                CANARY_REPO="${STABLE_REPO}"
+                CANARY_TAG="${STABLE_TAG}"
+              fi
+              RENDER_ARGS+=(
+                --set "canary.image.repository=${CANARY_REPO}"
+                --set "canary.image.tag=${CANARY_TAG}"
+                --set "canary.replicas=0"
+                --set "canary.weight=0"
+              )
+              OUT_IMAGE="${CANARY_REPO}:${CANARY_TAG}"
+              OUT_STABLE="${STABLE_IMAGE}"
+              ;;
+          esac
+
+          while IFS= read -r kv; do
+            [ -z "$kv" ] && continue
+            RENDER_ARGS+=(--set "$kv")
+          done <<< "${HELM_SET}"
+
+          if [ "${DRY_RUN}" == "true" ]; then
+            helm template "${RELEASE_NAME}" "${CHART_DIR}" "${RENDER_ARGS[@]}"
+          else
+            ARGS=(
+              upgrade --install "${RELEASE_NAME}" "${CHART_DIR}"
+              "${RENDER_ARGS[@]}"
+              --create-namespace
+              --timeout "${TIMEOUT}"
+            )
+            [ "${WAIT}" == "true" ] && ARGS+=(--wait)
+            [ "${ATOMIC}" == "true" ] && ARGS+=(--atomic)
+            helm "${ARGS[@]}"
+
+            if [ "${WAIT}" == "true" ] && [ "${ACTION}" == "deploy" ]; then
+              kubectl get deploy -n "${NAMESPACE}" \
+                -l "app.kubernetes.io/instance=${RELEASE_NAME}-canary,app.kubernetes.io/track=canary" \
+                -o name | while read -r d; do
+                  [ -z "$d" ] && continue
+                  kubectl rollout status "$d" -n "${NAMESPACE}" --timeout="${TIMEOUT}"
+                done
+            fi
+          fi
+
+          {
+            echo "action=${ACTION}"
+            echo "image=${OUT_IMAGE}"
+            echo "stable-image=${OUT_STABLE}"
+          } >> "${GITHUB_OUTPUT}"

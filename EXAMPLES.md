@@ -445,6 +445,150 @@ EXPOSE 8080
 CMD ["my-rust-api"]
 ```
 
+## Example 12: API Canary Deploy (deploy → promote)
+
+Canary for HTTP APIs. Put `strategy` defaults in values if you want a smoke host; the workflow
+always sets `strategy.mode=canary` and the canary image via `--set`.
+
+```yaml
+# k8s/values-api.yaml
+fullnameOverride: my-api
+ingress:
+  enabled: true
+  host: my-api.local
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+canary:
+  trafficProvider: none   # or traefik for weighted split (requires Traefik CRDs)
+  ingress:
+    enabled: true         # exposes canary.my-api.local for smoke tests
+```
+
+```yaml
+# .github/workflows/cd-api.yml
+name: CD API
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'canary phase'
+        type: choice
+        options: [deploy, promote, abort]
+        default: deploy
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.action == 'deploy' }}
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
+    with:
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      dockerfile: Dockerfile
+      image-name: my-api
+      registry-host: ${{ vars.REGISTRY_HOST }}
+      runs-on: self-hosted
+
+  canary:
+    needs: [build]
+    if: ${{ always() && (needs.build.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-canary.yml@master
+    with:
+      action: ${{ github.event.inputs.action || 'deploy' }}
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      environment: production   # gate promote with Environment required reviewers
+      release-name: my-api
+      namespace: my-api
+      kube-context: ${{ vars.KUBE_CONTEXT }}
+      values-file: k8s/values-api.yaml
+      image: ${{ needs.build.outputs.image }}
+      canary-weight: 10
+      runs-on: self-hosted
+```
+
+Typical flow: automatic `action=deploy` after CI → smoke on `canary.my-api.local` →
+`workflow_dispatch` with `promote` (or `abort`). For Traefik weighted traffic, set
+`canary.trafficProvider: traefik` in values (cluster must have Traefik CRDs).
+
+## Example 13: Kafka Worker Blue/Green
+
+Blue/green for consumers. Disable Ingress; use TCP/exec probes if the process has no HTTP port.
+Both slots must share the same Kafka `group.id`. Prefer `overlap-seconds: 0`.
+
+```yaml
+# k8s/values-worker.yaml
+fullnameOverride: my-worker
+ingress:
+  enabled: false
+replicaCount: 2
+livenessProbe:
+  exec:
+    command: ["pgrep", "-f", "my-worker"]
+  initialDelaySeconds: 10
+  periodSeconds: 30
+readinessProbe:
+  exec:
+    command: ["pgrep", "-f", "my-worker"]
+  initialDelaySeconds: 5
+  periodSeconds: 10
+env:
+  - name: KAFKA_GROUP_ID
+    value: my-worker
+```
+
+```yaml
+# .github/workflows/cd-worker.yml
+name: CD Worker
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        options: [deploy, promote, abort]
+        default: deploy
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.action == 'deploy' }}
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
+    with:
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      dockerfile: Dockerfile
+      image-name: my-worker
+      registry-host: ${{ vars.REGISTRY_HOST }}
+      runs-on: self-hosted
+
+  bluegreen:
+    needs: [build]
+    if: ${{ always() && (needs.build.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-bluegreen.yml@master
+    with:
+      action: ${{ github.event.inputs.action || 'deploy' }}
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      environment: production
+      release-name: my-worker
+      namespace: my-worker
+      kube-context: ${{ vars.KUBE_CONTEXT }}
+      values-file: k8s/values-worker.yaml
+      image: ${{ needs.build.outputs.image }}
+      active-replicas: 2
+      inactive-replicas: 2
+      overlap-seconds: 0
+      runs-on: self-hosted
+```
+
+Flow: `deploy` starts the new image on the inactive slot while the active slot keeps consuming →
+check lag/errors → `promote` flips `activeSlot` and scales the old slot to 0 → or `abort` scales
+the inactive slot down.
+
 ## Important Notes
 
 ### Permissions

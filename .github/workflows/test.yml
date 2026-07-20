@@ -4,6 +4,7 @@
 # Coverage notes:
 # - `ref` is exercised on docker-build-push and k8s-deploy (explicit github.sha),
 #   with a follow-up job asserting docker's short-sha output matches that ref.
+# - k8s-canary / k8s-bluegreen are dry-run smoke-tested for deploy/promote/abort.
 # - `adopt-existing` is NOT smoke-tested here: k8s-deploy skips it when
 #   dry-run is true, and a real run needs a disposable cluster/namespace.
 #   Validate that path manually against an isolated namespace when changing it.
@@ -35,6 +36,14 @@ on:
         default: false
       run-k8s-deploy:
         description: 'Test k8s-deploy.yml (helm template dry-run + ref; no cluster; adopt-existing not covered)'
+        type: boolean
+        default: false
+      run-k8s-canary:
+        description: 'Test k8s-canary.yml (helm template dry-run for deploy/promote/abort; no cluster)'
+        type: boolean
+        default: false
+      run-k8s-bluegreen:
+        description: 'Test k8s-bluegreen.yml (helm template dry-run for deploy/promote/abort; no cluster)'
         type: boolean
         default: false
 
@@ -125,3 +134,103 @@ jobs:
       environment: 'test'
       # adopt-existing intentionally omitted — skipped under dry-run and needs a
       # real cluster when enabled; see file header.
+
+  test-k8s-canary-deploy:
+    if: ${{ github.event.inputs.run-k8s-canary == 'true' }}
+    uses: ./.github/workflows/k8s-canary.yml
+    with:
+      action: deploy
+      toolkit-ref: ${{ github.ref_name }}
+      ref: ${{ github.sha }}
+      release-name: smoke-canary
+      namespace: smoke-canary
+      kube-context: unused-in-dry-run
+      values-file: charts/app/values.yaml
+      image: registry.example.local:5000/smoke-canary:canary
+      stable-image: registry.example.local:5000/smoke-canary:stable
+      canary-weight: 10
+      dry-run: true
+      environment: 'test'
+      runs-on: ubuntu-latest
+
+  test-k8s-canary-promote:
+    if: ${{ github.event.inputs.run-k8s-canary == 'true' }}
+    uses: ./.github/workflows/k8s-canary.yml
+    with:
+      action: promote
+      toolkit-ref: ${{ github.ref_name }}
+      ref: ${{ github.sha }}
+      release-name: smoke-canary
+      namespace: smoke-canary
+      kube-context: unused-in-dry-run
+      values-file: charts/app/values.yaml
+      image: registry.example.local:5000/smoke-canary:canary
+      dry-run: true
+      environment: 'test'
+      runs-on: ubuntu-latest
+
+  test-k8s-canary-abort:
+    if: ${{ github.event.inputs.run-k8s-canary == 'true' }}
+    uses: ./.github/workflows/k8s-canary.yml
+    with:
+      action: abort
+      toolkit-ref: ${{ github.ref_name }}
+      ref: ${{ github.sha }}
+      release-name: smoke-canary
+      namespace: smoke-canary
+      kube-context: unused-in-dry-run
+      values-file: charts/app/values.yaml
+      stable-image: registry.example.local:5000/smoke-canary:stable
+      dry-run: true
+      environment: 'test'
+      runs-on: ubuntu-latest
+
+  test-k8s-bluegreen-deploy:
+    if: ${{ github.event.inputs.run-k8s-bluegreen == 'true' }}
+    uses: ./.github/workflows/k8s-bluegreen.yml
+    with:
+      action: deploy
+      toolkit-ref: ${{ github.ref_name }}
+      ref: ${{ github.sha }}
+      release-name: smoke-worker
+      namespace: smoke-worker
+      kube-context: unused-in-dry-run
+      values-file: charts/app/values.yaml
+      image: registry.example.local:5000/smoke-worker:new
+      active-slot: blue
+      dry-run: true
+      environment: 'test'
+      runs-on: ubuntu-latest
+
+  test-k8s-bluegreen-promote:
+    if: ${{ github.event.inputs.run-k8s-bluegreen == 'true' }}
+    uses: ./.github/workflows/k8s-bluegreen.yml
+    with:
+      action: promote
+      toolkit-ref: ${{ github.ref_name }}
+      ref: ${{ github.sha }}
+      release-name: smoke-worker
+      namespace: smoke-worker
+      kube-context: unused-in-dry-run
+      values-file: charts/app/values.yaml
+      image: registry.example.local:5000/smoke-worker:new
+      active-slot: blue
+      dry-run: true
+      environment: 'test'
+      runs-on: ubuntu-latest
+
+  test-k8s-bluegreen-abort:
+    if: ${{ github.event.inputs.run-k8s-bluegreen == 'true' }}
+    uses: ./.github/workflows/k8s-bluegreen.yml
+    with:
+      action: abort
+      toolkit-ref: ${{ github.ref_name }}
+      ref: ${{ github.sha }}
+      release-name: smoke-worker
+      namespace: smoke-worker
+      kube-context: unused-in-dry-run
+      values-file: charts/app/values.yaml
+      active-slot: blue
+      dry-run: true
+      environment: 'test'
+      runs-on: ubuntu-latest

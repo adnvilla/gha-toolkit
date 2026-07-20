@@ -1,0 +1,451 @@
+# Reusable workflow for blue/green deployments (e.g. Kafka workers) via Helm (charts/app).
+# Phases: deploy (ship inactive slot) → promote | abort.
+# The toolkit does not talk to Kafka — apps must share the same consumer group.id;
+# prefer overlap-seconds=0 unless handlers are idempotent under dual consumers.
+# Assumes the runner has a working kubeconfig (see ARCHITECTURE.md).
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Kubernetes Blue/Green Deploy
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: 'Blue/green phase: deploy (update inactive slot), promote, or abort'
+        required: true
+        type: string
+      toolkit-ref:
+        description: >-
+          Optional override for the git ref of adnvilla/gha-toolkit to pull charts/app from.
+          Defaults to job.workflow_sha. Ignored when use-local-chart is true.
+        required: false
+        type: string
+        default: ''
+      ref:
+        description: >-
+          Git ref/SHA of the calling repo to check out (for the values file). Pass
+          github.event.workflow_run.head_sha explicitly for workflow_run-triggered CD.
+        required: false
+        type: string
+        default: ''
+      use-local-chart:
+        description: 'Use a chart from the calling repo instead of charts/app from gha-toolkit'
+        required: false
+        type: boolean
+        default: false
+      chart-path:
+        description: 'Path to the Helm chart'
+        required: false
+        type: string
+        default: 'charts/app'
+      release-name:
+        description: 'Helm release name'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace (created automatically if missing)'
+        required: true
+        type: string
+      kube-context:
+        description: 'kubectl context to deploy to'
+        required: true
+        type: string
+      values-file:
+        description: 'Path to the values file in the calling repo'
+        required: true
+        type: string
+      image:
+        description: >-
+          Full image reference for the inactive slot (action=deploy) or the image being
+          promoted. Required for deploy and promote; optional for abort.
+        required: false
+        type: string
+        default: ''
+      active-slot:
+        description: >-
+          Override the current active slot (blue|green). When empty, read from the release
+          or default to blue.
+        required: false
+        type: string
+        default: ''
+      active-replicas:
+        description: 'Replica count for the active slot'
+        required: false
+        type: number
+        default: 1
+      inactive-replicas:
+        description: 'Replica count for the inactive slot on deploy (before promote)'
+        required: false
+        type: number
+        default: 1
+      overlap-seconds:
+        description: >-
+          On promote, keep both slots up this many seconds before scaling the old active
+          down (Kafka rebalance overlap). Prefer 0.
+        required: false
+        type: number
+        default: 0
+      helm-set:
+        description: 'Additional --set overrides, one KEY=VALUE per line'
+        required: false
+        type: string
+        default: ''
+      wait:
+        description: 'Wait for resources to become ready'
+        required: false
+        type: boolean
+        default: true
+      atomic:
+        description: 'Roll back automatically if the upgrade fails'
+        required: false
+        type: boolean
+        default: true
+      timeout:
+        description: 'Time to wait for the rollout, e.g. 180s'
+        required: false
+        type: string
+        default: '180s'
+      helm-version:
+        description: 'Helm version to install if not already present on the runner'
+        required: false
+        type: string
+        default: 'v3.16.2'
+      dry-run:
+        description: 'Render with helm template instead of deploying (no cluster access)'
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'GitHub Environment name for this job'
+        required: false
+        type: string
+        default: 'production'
+      environment-url:
+        description: 'Optional URL shown next to the environment in the GitHub Actions UI'
+        required: false
+        type: string
+        default: ''
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'self-hosted'
+    outputs:
+      action:
+        description: 'Action that was executed'
+        value: ${{ jobs.bluegreen.outputs.action }}
+      active-slot:
+        description: 'Active slot after this run'
+        value: ${{ jobs.bluegreen.outputs.active-slot }}
+      deployed-slot:
+        description: 'Slot that received the new image on deploy (inactive before promote)'
+        value: ${{ jobs.bluegreen.outputs.deployed-slot }}
+      image:
+        description: 'Image reference applied by this run'
+        value: ${{ jobs.bluegreen.outputs.image }}
+
+jobs:
+  bluegreen:
+    runs-on: ${{ inputs.runs-on }}
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.environment-url }}
+    outputs:
+      action: ${{ steps.deploy.outputs.action }}
+      active-slot: ${{ steps.deploy.outputs.active-slot }}
+      deployed-slot: ${{ steps.deploy.outputs.deployed-slot }}
+      image: ${{ steps.deploy.outputs.image }}
+    steps:
+      - name: Validate action
+        env:
+          ACTION: ${{ inputs.action }}
+          ACTIVE_SLOT_INPUT: ${{ inputs.active-slot }}
+        run: |
+          case "${ACTION}" in
+            deploy|promote|abort) ;;
+            *)
+              echo "::error::action must be deploy, promote, or abort (got '${ACTION}')"
+              exit 1
+              ;;
+          esac
+          if [ "${ACTION}" != "abort" ] && [ -z "${{ inputs.image }}" ]; then
+            echo "::error::image is required for action=${ACTION}"
+            exit 1
+          fi
+          if [ -n "${ACTIVE_SLOT_INPUT}" ] \
+            && [ "${ACTIVE_SLOT_INPUT}" != "blue" ] \
+            && [ "${ACTIVE_SLOT_INPUT}" != "green" ]; then
+            echo "::error::active-slot must be blue or green (got '${ACTIVE_SLOT_INPUT}')"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Checkout gha-toolkit chart
+        if: ${{ !inputs.use-local-chart }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.toolkit-ref || job.workflow_sha }}
+          path: .gha-toolkit-chart
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ inputs.helm-version }}
+
+      - name: Select kube context
+        if: ${{ !inputs.dry-run }}
+        run: |
+          kubectl config use-context "${{ inputs.kube-context }}"
+          kubectl cluster-info
+
+      - name: Deploy blue/green phase
+        id: deploy
+        env:
+          USE_LOCAL_CHART: ${{ inputs.use-local-chart }}
+          CHART_PATH: ${{ inputs.chart-path }}
+          RELEASE_NAME: ${{ inputs.release-name }}
+          NAMESPACE: ${{ inputs.namespace }}
+          VALUES_FILE: ${{ inputs.values-file }}
+          IMAGE: ${{ inputs.image }}
+          ACTION: ${{ inputs.action }}
+          ACTIVE_SLOT_INPUT: ${{ inputs.active-slot }}
+          ACTIVE_REPLICAS: ${{ inputs.active-replicas }}
+          INACTIVE_REPLICAS: ${{ inputs.inactive-replicas }}
+          OVERLAP_SECONDS: ${{ inputs.overlap-seconds }}
+          HELM_SET: ${{ inputs.helm-set }}
+          WAIT: ${{ inputs.wait }}
+          ATOMIC: ${{ inputs.atomic }}
+          TIMEOUT: ${{ inputs.timeout }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+
+          if [ "${USE_LOCAL_CHART}" == "true" ]; then
+            CHART_DIR="${CHART_PATH}"
+          else
+            CHART_DIR=".gha-toolkit-chart/${CHART_PATH}"
+          fi
+
+          read_release_json() {
+            if [ "${DRY_RUN}" == "true" ]; then
+              echo "{}"
+              return
+            fi
+            if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+              helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json
+            else
+              echo "{}"
+            fi
+          }
+
+          VALUES_JSON="$(read_release_json)"
+
+          # Parse active slot + per-slot images from the current release (or defaults).
+          eval "$(
+            VALUES_JSON="${VALUES_JSON}" ACTIVE_SLOT_INPUT="${ACTIVE_SLOT_INPUT}" python3 <<'PY'
+          import json, os
+          v = json.loads(os.environ.get("VALUES_JSON") or "{}")
+          bg = v.get("blueGreen") or {}
+          img = v.get("image") or {}
+          active = os.environ.get("ACTIVE_SLOT_INPUT") or bg.get("activeSlot") or "blue"
+          blue = (bg.get("blue") or {}).get("image") or {}
+          green = (bg.get("green") or {}).get("image") or {}
+          fallback_repo = img.get("repository") or ""
+          fallback_tag = img.get("tag") or ""
+          print("ACTIVE_SLOT=%r" % active)
+          print("BLUE_REPO=%r" % (blue.get("repository") or fallback_repo))
+          print("BLUE_TAG=%r" % (blue.get("tag") or fallback_tag))
+          print("GREEN_REPO=%r" % (green.get("repository") or fallback_repo))
+          print("GREEN_TAG=%r" % (green.get("tag") or fallback_tag))
+          PY
+          )"
+
+          if [ "${ACTIVE_SLOT}" = "blue" ]; then
+            INACTIVE_SLOT="green"
+          else
+            INACTIVE_SLOT="blue"
+          fi
+
+          IMAGE_REPO=""
+          IMAGE_TAG=""
+          if [ -n "${IMAGE}" ]; then
+            IMAGE_REPO="${IMAGE%:*}"
+            IMAGE_TAG="${IMAGE##*:}"
+          fi
+
+          # Defaults when no prior release (dry-run / first install).
+          if [ -z "${BLUE_REPO}" ] && [ -n "${IMAGE_REPO}" ]; then
+            BLUE_REPO="${IMAGE_REPO}"
+            BLUE_TAG="${IMAGE_TAG}"
+          fi
+          if [ -z "${GREEN_REPO}" ] && [ -n "${IMAGE_REPO}" ]; then
+            GREEN_REPO="${IMAGE_REPO}"
+            GREEN_TAG="${IMAGE_TAG}"
+          fi
+
+          BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+          GREEN_REPLICAS="0"
+          if [ "${ACTIVE_SLOT}" = "green" ]; then
+            BLUE_REPLICAS="0"
+            GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+          fi
+
+          NEW_ACTIVE="${ACTIVE_SLOT}"
+          DEPLOYED_SLOT=""
+
+          case "${ACTION}" in
+            deploy)
+              DEPLOYED_SLOT="${INACTIVE_SLOT}"
+              if [ "${INACTIVE_SLOT}" = "green" ]; then
+                GREEN_REPO="${IMAGE_REPO}"
+                GREEN_TAG="${IMAGE_TAG}"
+                GREEN_REPLICAS="${INACTIVE_REPLICAS}"
+              else
+                BLUE_REPO="${IMAGE_REPO}"
+                BLUE_TAG="${IMAGE_TAG}"
+                BLUE_REPLICAS="${INACTIVE_REPLICAS}"
+              fi
+              # Active slot keeps consuming; do not change its replicas/image here.
+              if [ "${ACTIVE_SLOT}" = "blue" ]; then
+                BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+              else
+                GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+              fi
+              ;;
+            promote)
+              DEPLOYED_SLOT="${INACTIVE_SLOT}"
+              NEW_ACTIVE="${INACTIVE_SLOT}"
+              if [ -n "${IMAGE_REPO}" ]; then
+                if [ "${INACTIVE_SLOT}" = "green" ]; then
+                  GREEN_REPO="${IMAGE_REPO}"; GREEN_TAG="${IMAGE_TAG}"
+                else
+                  BLUE_REPO="${IMAGE_REPO}"; BLUE_TAG="${IMAGE_TAG}"
+                fi
+              fi
+              if [ "${OVERLAP_SECONDS}" -gt 0 ] && [ "${DRY_RUN}" != "true" ]; then
+                # Brief dual-run: both slots up, then flip.
+                if [ "${INACTIVE_SLOT}" = "green" ]; then
+                  GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+                  BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+                else
+                  BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+                  GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+                fi
+              else
+                if [ "${NEW_ACTIVE}" = "blue" ]; then
+                  BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+                  GREEN_REPLICAS="0"
+                else
+                  GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+                  BLUE_REPLICAS="0"
+                fi
+              fi
+              ;;
+            abort)
+              DEPLOYED_SLOT="${INACTIVE_SLOT}"
+              NEW_ACTIVE="${ACTIVE_SLOT}"
+              if [ "${INACTIVE_SLOT}" = "green" ]; then
+                GREEN_REPLICAS="0"
+                BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+              else
+                BLUE_REPLICAS="0"
+                GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+              fi
+              ;;
+          esac
+
+          # Top-level image mirrors the active slot (useful for tooling/docs).
+          if [ "${NEW_ACTIVE}" = "blue" ]; then
+            TOP_REPO="${BLUE_REPO}"; TOP_TAG="${BLUE_TAG}"
+          else
+            TOP_REPO="${GREEN_REPO}"; TOP_TAG="${GREEN_TAG}"
+          fi
+
+          RENDER_ARGS=(
+            -n "${NAMESPACE}"
+            -f "${VALUES_FILE}"
+            --set "strategy.mode=blueGreen"
+            --set "blueGreen.activeSlot=${NEW_ACTIVE}"
+            --set "blueGreen.overlapSeconds=${OVERLAP_SECONDS}"
+            --set "image.repository=${TOP_REPO}"
+            --set "image.tag=${TOP_TAG}"
+            --set "blueGreen.blue.image.repository=${BLUE_REPO}"
+            --set "blueGreen.blue.image.tag=${BLUE_TAG}"
+            --set "blueGreen.blue.replicas=${BLUE_REPLICAS}"
+            --set "blueGreen.green.image.repository=${GREEN_REPO}"
+            --set "blueGreen.green.image.tag=${GREEN_TAG}"
+            --set "blueGreen.green.replicas=${GREEN_REPLICAS}"
+          )
+
+          while IFS= read -r kv; do
+            [ -z "$kv" ] && continue
+            RENDER_ARGS+=(--set "$kv")
+          done <<< "${HELM_SET}"
+
+          helm_apply() {
+            if [ "${DRY_RUN}" == "true" ]; then
+              helm template "${RELEASE_NAME}" "${CHART_DIR}" "${RENDER_ARGS[@]}"
+            else
+              ARGS=(
+                upgrade --install "${RELEASE_NAME}" "${CHART_DIR}"
+                "${RENDER_ARGS[@]}"
+                --create-namespace
+                --timeout "${TIMEOUT}"
+              )
+              [ "${WAIT}" == "true" ] && ARGS+=(--wait)
+              [ "${ATOMIC}" == "true" ] && ARGS+=(--atomic)
+              helm "${ARGS[@]}"
+            fi
+          }
+
+          helm_apply
+
+          # Promote with overlap: after both are up, scale old active to 0 and flip Service.
+          if [ "${ACTION}" == "promote" ] && [ "${OVERLAP_SECONDS}" -gt 0 ] && [ "${DRY_RUN}" != "true" ]; then
+            echo "Overlapping both slots for ${OVERLAP_SECONDS}s before cutting over"
+            sleep "${OVERLAP_SECONDS}"
+            if [ "${NEW_ACTIVE}" = "blue" ]; then
+              GREEN_REPLICAS="0"
+              BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+            else
+              BLUE_REPLICAS="0"
+              GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+            fi
+            RENDER_ARGS=(
+              -n "${NAMESPACE}"
+              -f "${VALUES_FILE}"
+              --set "strategy.mode=blueGreen"
+              --set "blueGreen.activeSlot=${NEW_ACTIVE}"
+              --set "blueGreen.overlapSeconds=${OVERLAP_SECONDS}"
+              --set "image.repository=${TOP_REPO}"
+              --set "image.tag=${TOP_TAG}"
+              --set "blueGreen.blue.image.repository=${BLUE_REPO}"
+              --set "blueGreen.blue.image.tag=${BLUE_TAG}"
+              --set "blueGreen.blue.replicas=${BLUE_REPLICAS}"
+              --set "blueGreen.green.image.repository=${GREEN_REPO}"
+              --set "blueGreen.green.image.tag=${GREEN_TAG}"
+              --set "blueGreen.green.replicas=${GREEN_REPLICAS}"
+            )
+            while IFS= read -r kv; do
+              [ -z "$kv" ] && continue
+              RENDER_ARGS+=(--set "$kv")
+            done <<< "${HELM_SET}"
+            helm_apply
+          fi
+
+          OUT_IMAGE="${IMAGE}"
+          if [ -z "${OUT_IMAGE}" ]; then
+            OUT_IMAGE="${TOP_REPO}:${TOP_TAG}"
+          fi
+
+          {
+            echo "action=${ACTION}"
+            echo "active-slot=${NEW_ACTIVE}"
+            echo "deployed-slot=${DEPLOYED_SLOT}"
+            echo "image=${OUT_IMAGE}"
+          } >> "${GITHUB_OUTPUT}"

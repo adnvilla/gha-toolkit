@@ -1,0 +1,32 @@
+{{- /* Optional smoke-test Ingress for the canary Service (trafficProvider=none). */ -}}
+{{- if and (eq (include "app.strategyMode" .) "canary") .Values.canary.ingress.enabled (ne .Values.canary.trafficProvider "traefik") -}}
+{{- $host := include "app.canary.ingressHost" . -}}
+{{- if $host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "app.canary.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/track: canary
+  {{- with .Values.canary.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.canary.ingress.path }}
+            pathType: {{ .Values.canary.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "app.canary.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}
+{{- end }}

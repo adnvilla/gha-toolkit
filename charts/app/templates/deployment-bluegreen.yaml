@@ -1,0 +1,75 @@
+{{- if eq (include "app.strategyMode" .) "blueGreen" -}}
+{{- range $slot := list "blue" "green" }}
+{{- $slotValues := index $.Values.blueGreen $slot }}
+{{- $repo := $slotValues.image.repository | default $.Values.image.repository }}
+{{- $tag := $slotValues.image.tag | default $.Values.image.tag }}
+{{- $ctx := dict "root" $ "slot" $slot }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "app.slot.fullname" $ctx }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    app.kubernetes.io/slot: {{ $slot }}
+spec:
+  replicas: {{ $slotValues.replicas }}
+  selector:
+    matchLabels:
+      {{- include "app.slot.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.slot.selectorLabels" $ctx | nindent 8 }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or $.Values.serviceAccount.create $.Values.serviceAccount.name }}
+      serviceAccountName: {{ include "app.serviceAccountName" $ }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "app.name" $ }}
+          image: "{{ $repo }}:{{ $tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $.Values.containerPort }}
+              protocol: TCP
+          env:
+            - name: DEPLOYMENT_SLOT
+              value: {{ $slot | quote }}
+            {{- with $.Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $.Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+{{- end }}

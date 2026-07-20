@@ -1,4 +1,6 @@
-{{- if .Values.podDisruptionBudget.enabled -}}
+{{- $mode := include "app.strategyMode" . -}}
+{{- /* PDB selects stable/rolling pods; skip for blueGreen (slot selectors differ). */ -}}
+{{- if and .Values.podDisruptionBudget.enabled (or (eq $mode "rolling") (eq $mode "canary")) -}}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
