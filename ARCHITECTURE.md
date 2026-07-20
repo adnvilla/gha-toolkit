@@ -93,7 +93,7 @@ on:
 ```
 
 **Inputs:**
-- `node-version` (string): Node.js version for semantic-release (default: '20')
+- `node-version` (string): Node.js version for semantic-release (default: '22')
 - `dry-run` (boolean): Test mode without publishing (default: false)
 
 **Secrets:**

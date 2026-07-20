@@ -10,7 +10,8 @@ on:
         description: 'Node.js version for semantic-release'
         required: false
         type: string
-        default: '20'
+        # semantic-release@^25 requires Node ^22.14.0 || >= 24.10.0.
+        default: '22'
       dry-run:
         description: 'Run semantic-release in dry-run mode'
         required: false

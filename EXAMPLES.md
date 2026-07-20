@@ -89,7 +89,7 @@ jobs:
     permissions:
       contents: write
     with:
-      node-version: '20'
+      node-version: '22'
       dry-run: false
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
