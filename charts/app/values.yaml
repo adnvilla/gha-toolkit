@@ -66,6 +66,58 @@ ingress:
   path: /
   pathType: Prefix
 
+# Deployment strategy. Default `rolling` preserves the single-Deployment behaviour
+# used by k8s-deploy.yml. Set to `canary` (APIs) or `blueGreen` (e.g. Kafka workers)
+# when using k8s-canary.yml / k8s-bluegreen.yml.
+strategy:
+  mode: rolling # rolling | canary | blueGreen
+
+# Canary settings (only used when strategy.mode=canary). The stable Deployment keeps
+# the rolling resource names/selectors; the canary Deployment/Service use a distinct
+# instance label so they never join the stable Service endpoints.
+canary:
+  # Image for the canary Deployment. Workflows set these via --set on deploy.
+  image:
+    repository: ""
+    tag: ""
+  replicas: 1
+  # % of traffic sent to canary when trafficProvider=traefik (0–100). Ignored for
+  # trafficProvider=none (canary is only reachable via canary.ingress).
+  weight: 10
+  # none: main Ingress → stable; optional canary.ingress for smoke tests.
+  # traefik: render TraefikService + IngressRoute with weighted backends (requires
+  # Traefik CRDs in the cluster). Standard Ingress is skipped in that case.
+  trafficProvider: none # none | traefik
+  ingress:
+    enabled: false
+    # Defaults to "canary.<ingress.host>" when empty and ingress.host is set.
+    host: ""
+    path: /
+    pathType: Prefix
+    annotations: {}
+  # Traefik IngressRoute entryPoints when trafficProvider=traefik.
+  traefik:
+    entryPoints:
+      - web
+
+# Blue/green settings (only used when strategy.mode=blueGreen). Two Deployments
+# (…-blue / …-green); the Service selects pods for blueGreen.activeSlot only.
+# Ideal for Kafka workers: same consumer group, promote flips the active slot.
+blueGreen:
+  activeSlot: blue # blue | green
+  # Seconds both slots may run during promote (Kafka rebalance overlap). Prefer 0.
+  overlapSeconds: 0
+  blue:
+    replicas: 1
+    image:
+      repository: ""
+      tag: ""
+  green:
+    replicas: 0
+    image:
+      repository: ""
+      tag: ""
+
 # Opt-in resources (default off — existing consumers see no change).
 serviceAccount:
   # Create a ServiceAccount and mount it on the Deployment pods.

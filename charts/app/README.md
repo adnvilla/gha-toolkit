@@ -1,8 +1,9 @@
 # app
 
-Generic Helm chart for stateless HTTP applications. Shared by every project that consumes
-`gha-toolkit`'s `k8s-deploy.yml` reusable workflow — projects supply a small `values-<env>.yaml`
-instead of hand-writing `Deployment`/`Service`/`Ingress` manifests.
+Generic Helm chart for stateless HTTP applications and Kafka-style workers. Shared by every project
+that consumes `gha-toolkit`'s `k8s-deploy.yml`, `k8s-canary.yml`, or `k8s-bluegreen.yml` reusable
+workflows — projects supply a small `values-<env>.yaml` instead of hand-writing
+`Deployment`/`Service`/`Ingress` manifests.
 
 ## Usage
 
@@ -15,8 +16,43 @@ helm upgrade --install my-app charts/app \
   --wait --atomic --timeout 180s
 ```
 
-In practice this is driven by the `k8s-deploy.yml` reusable workflow, which handles the checkout,
-context selection and image parsing for you.
+In practice this is driven by the reusable deploy workflows, which handle the checkout, context
+selection and image parsing for you.
+
+## Deployment strategies
+
+| `strategy.mode` | Workflow | Behaviour |
+|---|---|---|
+| `rolling` (default) | `k8s-deploy.yml` | Single Deployment/Service/Ingress — unchanged from earlier chart versions |
+| `canary` | `k8s-canary.yml` | Stable Deployment + canary Deployment/Service; promote/abort via workflow `action` |
+| `blueGreen` | `k8s-bluegreen.yml` | `-blue` / `-green` Deployments; Service selects `blueGreen.activeSlot` |
+
+**Do not flip `strategy.mode` on an existing release without a migration plan** — blue/green and
+canary introduce new Deployments and (for blue/green) change the Service selector. Prefer enabling
+the mode on a new release name, or delete the old Deployment/Service first (same caveats as
+`adopt-existing` in the migration section below).
+
+### Canary (APIs)
+
+- Stable resources keep the rolling names and selectors (`app.fullname`).
+- Canary pods use a distinct `app.kubernetes.io/instance` (`<release>-canary`) so they never join
+  the stable Service endpoints.
+- `canary.trafficProvider: none` (default): main Ingress → stable; optional `canary.ingress` for a
+  smoke host (`canary.<ingress.host>` when `canary.ingress.host` is empty).
+- `canary.trafficProvider: traefik`: renders a `TraefikService` + `IngressRoute` with weighted
+  backends (requires Traefik CRDs). Standard Ingress is skipped. `canary.weight` is the % sent to
+  the canary (0–100).
+- Pods get `DEPLOYMENT_TRACK=canary` on the canary container.
+
+### Blue/green (Kafka workers)
+
+- Two Deployments: `<fullname>-blue` and `<fullname>-green`, labeled with `app.kubernetes.io/slot`.
+- The Service selects only `blueGreen.activeSlot`.
+- Each pod gets `DEPLOYMENT_SLOT=blue|green` for logs/metrics.
+- The toolkit does **not** talk to Kafka. Use the same consumer `group.id` on both slots; prefer
+  `overlapSeconds: 0` (scale up new → cut over → scale down old) unless handlers are idempotent
+  under overlapping consumers.
+- Disable Ingress for workers (`ingress.enabled: false`). Override probes to TCP/exec as needed.
 
 ## Values
 
@@ -24,7 +60,7 @@ context selection and image parsing for you.
 |---|---|---|
 | `nameOverride` | `""` | Override the chart name used in generated resource names |
 | `fullnameOverride` | `""` | Override the fully computed release name |
-| `replicaCount` | `1` | Number of pod replicas |
+| `replicaCount` | `1` | Number of pod replicas (rolling / canary stable) |
 | `image.repository` | `""` | Image repository (required) |
 | `image.tag` | `"latest"` | Image tag |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy |
@@ -41,19 +77,31 @@ context selection and image parsing for you.
 | `service.type` | `ClusterIP` | Service type |
 | `service.port` | `80` | Service port |
 | `service.targetPort` | `8080` | Port forwarded to the container |
-| `ingress.enabled` | `false` | Whether to render an Ingress |
+| `ingress.enabled` | `false` | Whether to render an Ingress (or Traefik IngressRoute when canary+traefik) |
 | `ingress.className` | unset | `ingressClassName`, if set |
 | `ingress.annotations` | `{}` | Ingress annotations (e.g. Traefik entrypoints) |
 | `ingress.host` | `""` | Ingress host |
 | `ingress.path` / `ingress.pathType` | `/` / `Prefix` | Ingress rule path |
+| `strategy.mode` | `rolling` | `rolling` \| `canary` \| `blueGreen` |
+| `canary.image.repository` / `tag` | `""` | Canary image (workflows set via `--set`) |
+| `canary.replicas` | `1` | Canary Deployment replicas |
+| `canary.weight` | `10` | % traffic to canary when `trafficProvider=traefik` |
+| `canary.trafficProvider` | `none` | `none` \| `traefik` |
+| `canary.ingress.enabled` | `false` | Smoke Ingress for canary Service (`none` provider) |
+| `canary.ingress.host` | `""` | Defaults to `canary.<ingress.host>` |
+| `canary.traefik.entryPoints` | `[web]` | IngressRoute entryPoints when using Traefik |
+| `blueGreen.activeSlot` | `blue` | `blue` \| `green` — Service selects this slot |
+| `blueGreen.overlapSeconds` | `0` | Documented for promote overlap; workflows drive the cutover |
+| `blueGreen.blue` / `green` `.replicas` | `1` / `0` | Per-slot replica counts |
+| `blueGreen.blue` / `green` `.image` | empty | Per-slot image; falls back to top-level `image` |
 | `serviceAccount.create` | `false` | Create a ServiceAccount and mount it on pods |
 | `serviceAccount.name` | `""` | SA name override (defaults to fullname when create is true) |
 | `serviceAccount.annotations` | `{}` | SA annotations (e.g. workload identity) |
 | `serviceAccount.automountServiceAccountToken` | `true` | Automount the SA token into pods |
-| `autoscaling.enabled` | `false` | Render an HPA (and omit Deployment `replicas`) |
+| `autoscaling.enabled` | `false` | Render an HPA (rolling/canary stable only; skipped for blueGreen) |
 | `autoscaling.minReplicas` / `maxReplicas` | `1` / `3` | HPA replica bounds |
 | `autoscaling.targetCPUUtilizationPercentage` | `80` | CPU target; set `targetMemoryUtilizationPercentage` for memory |
-| `podDisruptionBudget.enabled` | `false` | Render a PodDisruptionBudget |
+| `podDisruptionBudget.enabled` | `false` | Render a PodDisruptionBudget (rolling/canary only) |
 | `podDisruptionBudget.minAvailable` | `1` | Min available pods (preferred over `maxUnavailable` if both set) |
 | `networkPolicy.enabled` | `false` | Render a NetworkPolicy selecting the app pods |
 | `networkPolicy.allowSameNamespace` | `true` | Allow ingress from any pod in the same namespace to `service.port` |
@@ -73,11 +121,11 @@ not derived from `containerPort`, since they're raw pass-through blocks.
 ## Versioning
 
 `Chart.yaml`'s `version` is bumped manually whenever a template changes in a way consumers should
-notice (see `CONTRIBUTING.md`). `k8s-deploy.yml` auto-resolves the exact `gha-toolkit` commit it was
-called at (via the `job.workflow_sha` context) and pulls this chart from there, so a project pinned
-to `k8s-deploy.yml@v1.4.0` always gets the exact chart version shipped in that tag — no extra input
-needed. `toolkit-ref` remains available as an optional override, e.g. to test a chart change from a
-branch before tagging a release.
+notice (see `CONTRIBUTING.md`). `k8s-deploy.yml` / `k8s-canary.yml` / `k8s-bluegreen.yml` auto-resolve
+the exact `gha-toolkit` commit they were called at (via the `job.workflow_sha` context) and pull this
+chart from there, so a project pinned to `k8s-deploy.yml@v1.4.0` always gets the exact chart version
+shipped in that tag — no extra input needed. `toolkit-ref` remains available as an optional override,
+e.g. to test a chart change from a branch before tagging a release.
 
 ## Migrating an existing deployment
 

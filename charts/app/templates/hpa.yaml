@@ -1,4 +1,6 @@
-{{- if .Values.autoscaling.enabled -}}
+{{- $mode := include "app.strategyMode" . -}}
+{{- /* HPA targets the stable/rolling Deployment only — not blue/green slots. */ -}}
+{{- if and .Values.autoscaling.enabled (or (eq $mode "rolling") (eq $mode "canary")) -}}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

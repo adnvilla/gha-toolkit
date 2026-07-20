@@ -332,13 +332,46 @@ on:
   by GitHub but wasn't verified against a second live repo while building it — see `ENVIRONMENTS.md`'s
   "Known limitation" section.
 
+### k8s-canary.yml
+
+**Purpose:** Progressive delivery for HTTP APIs. Explicit phases via `action`: `deploy` (roll out
+canary), `promote` (canary → stable), `abort` (scale canary to 0). Uses `charts/app` with
+`strategy.mode=canary`. Does not replace `k8s-deploy.yml` (rolling remains the default path).
+
+**Key inputs:** `action` (required), same deploy inputs as `k8s-deploy.yml` (`release-name`,
+`namespace`, `kube-context`, `values-file`, `image`, …), plus `stable-image`, `canary-weight`,
+`canary-replicas`. Defaults `runs-on` to `self-hosted`.
+
+**Design Decisions:**
+- Promote/abort are separate workflow calls so GitHub Environments can gate cutover
+- Stable image is preserved from the release (or `stable-image`) on deploy; canary never joins the
+  stable Service (distinct instance label)
+- Weighted traffic requires `canary.trafficProvider: traefik` in values (Traefik CRDs); default is
+  smoke-host only (`canary.ingress`)
+
+### k8s-bluegreen.yml
+
+**Purpose:** Blue/green cutover for workers (e.g. Kafka consumers). Phases: `deploy` (image on
+inactive slot), `promote` (flip `activeSlot`), `abort` (scale inactive to 0). Uses
+`strategy.mode=blueGreen`.
+
+**Key inputs:** `action`, deploy inputs, `active-slot`, `active-replicas`, `inactive-replicas`,
+`overlap-seconds` (prefer `0`). Outputs `active-slot`, `deployed-slot`, `image`.
+
+**Design Decisions:**
+- Toolkit never talks to Kafka — apps share `group.id`; document idempotency if using overlap
+- Service selector tracks `blueGreen.activeSlot` only
+- Injects `DEPLOYMENT_SLOT` env for observability
+
 ### Helm Chart: charts/app
 
-A generic, reusable Helm chart for stateless HTTP applications, living in this repo so every
-consumer of `k8s-deploy.yml` shares one implementation instead of hand-writing
-`Deployment`/`Service`/`Ingress` manifests per project.
+A generic, reusable Helm chart for stateless HTTP applications and Kafka-style workers, living in
+this repo so every consumer of the k8s deploy workflows shares one implementation instead of
+hand-writing `Deployment`/`Service`/`Ingress` manifests per project.
 
-- `Deployment`, `Service`, and an optional `Ingress` (rendered only when `ingress.enabled`)
+- `strategy.mode`: `rolling` (default), `canary`, or `blueGreen` — opt-in; rolling preserves prior
+  resource names/selectors
+- `Deployment`, `Service`, and an optional `Ingress` (or Traefik `IngressRoute` when canary+traefik)
 - `affinity`, `tolerations`, `nodeSelector`, `env`, `envFrom`, `resources`, `livenessProbe` and
   `readinessProbe` are raw pass-through blocks (`toYaml` straight from `values.yaml`) — the chart
   doesn't need new features for project-specific quirks (e.g. node affinity rules to avoid scheduling
@@ -347,7 +380,8 @@ consumer of `k8s-deploy.yml` shares one implementation instead of hand-writing
 
 ## Self-hosted runner prerequisites
 
-`docker-build-push.yml` (with a local registry) and `k8s-deploy.yml` are designed to run on a
+`docker-build-push.yml` (with a local registry) and the k8s deploy workflows (`k8s-deploy.yml`,
+`k8s-canary.yml`, `k8s-bluegreen.yml`) are designed to run on a
 **self-hosted** runner with network access to the target registry/cluster — this is not obvious from
 the workflow YAML alone. The runner machine must have:
 
@@ -356,9 +390,10 @@ the workflow YAML alone. The runner machine must have:
 - **kubectl**, with every context passed via `kube-context` already defined locally — the kubeconfig
   lives on the runner machine and is never passed as a GitHub secret, matching how `navi-admin`'s
   existing pipeline works today
-- **helm** — `k8s-deploy.yml` installs it via `azure/setup-helm` if missing, but a pre-installed
+- **helm** — deploy workflows install it via `azure/setup-helm` if missing, but a pre-installed
   version avoids the extra download on every run
 - **Node/pnpm/corepack** available if `node.yml` also runs on that runner
+- **python3** on the runner for canary/bluegreen release-value introspection (`helm get values -o json`)
 
 `REGISTRY_HOST` and `KUBE_CONTEXT` are the recommended repo/org-level GitHub Variables for consumers
 to standardize on (see `navi-admin`'s `cd.yml` for the pattern), referenced as
@@ -383,8 +418,9 @@ on:
 
 1. **validate-workflows:** Validates all `.yml` files with `yamllint`
 2. **validate-markdown:** Validates all `.md` files with `markdownlint`
-3. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values, to
-   catch broken chart templates before they ship in a tag
+3. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values
+   (rolling, optional resources, canary, canary+traefik, blueGreen), to catch broken chart templates
+   before they ship in a tag
 4. **ci-complete:** Consolidated status gate over the three jobs above
 
 **Configuration Files:**
@@ -441,8 +477,9 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 │    build:  uses: .../docker-build-push.yml@v1.x                    │
 │                       │ outputs.image                               │
 │                       ▼                                            │
-│    deploy: uses: .../k8s-deploy.yml@v1.x  (needs: build)           │
-│              -f k8s/values-<env>.yaml  --image ${{ outputs.image }}│
+│    deploy: uses: .../k8s-deploy.yml@v1.x  (rolling)                │
+│         or .../k8s-canary.yml@v1.x     (API canary phases)         │
+│         or .../k8s-bluegreen.yml@v1.x  (worker slot cutover)       │
 │                                                                     │
 │  .github/workflows/release.yml                                     │
 │    uses: gha-toolkit/.github/workflows/release.yml@v1.x            │
@@ -455,9 +492,10 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 │                                                                     │
 │  Reusable Workflows:                                                │
 │    go-base.yml, go.yml, node.yml, rust.yml,                         │
-│    docker-build-push.yml, k8s-deploy.yml, release.yml               │
+│    docker-build-push.yml, k8s-deploy.yml,                           │
+│    k8s-canary.yml, k8s-bluegreen.yml, release.yml                   │
 │                                                                     │
-│  charts/app/  ◄── generic Helm chart, pulled by k8s-deploy.yml      │
+│  charts/app/  ◄── generic Helm chart, pulled by k8s-* workflows     │
 │               at the same git ref (toolkit-ref) the caller pinned   │
 │                                                                     │
 │  Internal Workflows:                                                │
@@ -580,8 +618,9 @@ npx semantic-release --dry-run
 ```
 
 `test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`, `rust.yml`,
-`docker-build-push.yml` (build-only) and `k8s-deploy.yml` (`helm template` dry-run) against this repo
-without needing real Go/Node/Rust projects, a registry, or a cluster. The docker and k8s smoke jobs pass an
+`docker-build-push.yml` (build-only), `k8s-deploy.yml` (`helm template` dry-run), `k8s-canary.yml`
+and `k8s-bluegreen.yml` (dry-run per action) against this repo without needing real Go/Node/Rust
+projects, a registry, or a cluster. The docker and k8s smoke jobs pass an
 explicit `ref: ${{ github.sha }}`; docker has a follow-up job asserting `outputs.short-sha` matches
 that ref. `adopt-existing` is **not** covered by `test.yml` — it is skipped under `dry-run` and needs
 a disposable cluster/namespace for a real run (validate manually when changing it).
