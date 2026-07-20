@@ -224,6 +224,28 @@ jobs:
 See `charts/app/README.md` for the full values reference, `ENVIRONMENTS.md` for staging/production
 setup, and `EXAMPLES.md` for a complete CI → build → deploy pipeline.
 
+### 7. Rust Build and Test (`rust.yml`)
+
+Format/lint/build/test for Rust projects (e.g. REST API services). Runs `cargo fmt --check`,
+`cargo clippy`, `cargo build` and `cargo test`, each independently toggleable, with an optional
+PostgreSQL container (default off) for integration tests. Deploy the resulting service with
+`docker-build-push.yml` + `k8s-deploy.yml` — see `EXAMPLES.md`.
+
+**Usage**:
+
+```yaml
+jobs:
+  ci:
+    uses: adnvilla/gha-toolkit/.github/workflows/rust.yml@master
+    with:
+      rust-version: 'stable'       # Optional, default: 'stable'
+      run-fmt: true                # Optional, default: true
+      run-clippy: true             # Optional, default: true
+      run-build: true              # Optional, default: true
+      run-tests: true              # Optional, default: true
+      postgres-enabled: false      # Optional, default: false (set true for DB integration tests)
+```
+
 ## 🚀 Future Workflows
 
 - Python (pytest, coverage, lint)

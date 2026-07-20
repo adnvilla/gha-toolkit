@@ -25,6 +25,10 @@ on:
         description: 'Test node.yml (this repo has no Node project, so build/lint/typecheck/test are skipped)'
         type: boolean
         default: false
+      run-rust:
+        description: 'Test rust.yml (this repo has no Rust project, so fmt/clippy/build/test are skipped)'
+        type: boolean
+        default: false
       run-docker-build-push:
         description: 'Test docker-build-push.yml against a fixture Dockerfile (build only, no push; exercises ref)'
         type: boolean
@@ -61,6 +65,17 @@ jobs:
       run-lint: false
       run-typecheck: false
       run-tests: false  # This repo has no Node project; validates workflow plumbing only
+
+  test-rust-workflow:
+    if: ${{ github.event.inputs.run-rust == 'true' }}
+    uses: ./.github/workflows/rust.yml
+    with:
+      rust-version: 'stable'
+      run-fmt: false
+      run-clippy: false
+      run-build: false
+      run-tests: false  # This repo has no Rust project; validates workflow plumbing only
+      postgres-enabled: false
 
   test-docker-build-push-workflow:
     if: ${{ github.event.inputs.run-docker-build-push == 'true' }}

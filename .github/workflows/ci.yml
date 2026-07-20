@@ -95,12 +95,30 @@ jobs:
             rest="${pin#adnvilla/gha-toolkit/}"
             path="${rest%@*}"
             ref="${rest##*@}"
-            if git show "${ref}:${path}" > /dev/null 2>&1 \
-              || git show "origin/${ref}:${path}" > /dev/null 2>&1; then
-              echo "OK   ${path}@${ref}"
+            # Version/tag pins (e.g. @v1.5.0, @1.5.0) are immutable and public — they
+            # MUST resolve at that exact ref, so a consumer copying the example never
+            # gets a broken `uses:`. Documenting an unreleased version still fails here.
+            #
+            # Branch pins (e.g. @master) mean "latest": the file only needs to exist in
+            # the code under review (HEAD). After this PR merges, the branch will contain
+            # it — so adding a new workflow + its @master docs passes in a single PR
+            # instead of the old chicken-and-egg where @master wasn't on origin/master yet.
+            if [[ "${ref}" =~ ^v?[0-9] ]]; then
+              if git show "${ref}:${path}" > /dev/null 2>&1; then
+                echo "OK   ${path}@${ref} (tag)"
+              else
+                echo "::error::${path} does not exist at tag/version ref '${ref}' (referenced in docs)"
+                FAIL=1
+              fi
             else
-              echo "::error::${path} does not exist at ref '${ref}' (referenced in docs)"
-              FAIL=1
+              if git show "HEAD:${path}" > /dev/null 2>&1 \
+                || git show "${ref}:${path}" > /dev/null 2>&1 \
+                || git show "origin/${ref}:${path}" > /dev/null 2>&1; then
+                echo "OK   ${path}@${ref} (branch)"
+              else
+                echo "::error::${path} does not exist at ref '${ref}' or in HEAD (referenced in docs)"
+                FAIL=1
+              fi
             fi
           done < <(grep -ohE 'adnvilla/gha-toolkit/\.github/workflows/[A-Za-z0-9_-]+\.yml@[A-Za-z0-9._/-]+' \
             README.md EXAMPLES.md ENVIRONMENTS.md | sort -u)

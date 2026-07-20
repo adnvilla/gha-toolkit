@@ -361,6 +361,90 @@ jobs:
       registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 ```
 
+## Example 10: Rust REST API — CI
+
+Format, lint, build and test a Rust service. Enable PostgreSQL for integration tests that need a
+database (`DATABASE_URL` is exposed to the test step):
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  ci:
+    uses: adnvilla/gha-toolkit/.github/workflows/rust.yml@master
+    with:
+      rust-version: 'stable'
+      postgres-enabled: true
+      postgres-version: '16'
+      database-url: 'postgres://postgres:postgres@localhost:5432/postgres'
+```
+
+## Example 11: Rust REST API — Full CI/CD (build image + deploy)
+
+The CD half reuses the language-agnostic `docker-build-push.yml` + `k8s-deploy.yml` — same pattern as
+the Node example above, just pointing at a Rust Dockerfile.
+
+```yaml
+# .github/workflows/cd.yml
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  build:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
+    with:
+      # Build the exact commit CI validated, not the default-branch HEAD.
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      dockerfile: Dockerfile
+      image-name: my-rust-api
+      registry-host: ghcr.io/my-org
+
+  deploy:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@master
+    with:
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      release-name: my-rust-api
+      namespace: my-rust-api
+      kube-context: local
+      values-file: k8s/values-local.yaml
+      image: ${{ needs.build.outputs.image }}
+```
+
+A minimal multi-stage `Dockerfile` for the service (compiles a release binary, then ships it on a
+slim runtime image):
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM rust:1.83 AS builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /app/target/release/my-rust-api /usr/local/bin/my-rust-api
+EXPOSE 8080
+CMD ["my-rust-api"]
+```
+
 ## Important Notes
 
 ### Permissions
