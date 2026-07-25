@@ -224,7 +224,49 @@ jobs:
 See `charts/app/README.md` for the full values reference, `ENVIRONMENTS.md` for staging/production
 setup, and `EXAMPLES.md` for a complete CI → build → deploy pipeline.
 
-### 7. Rust Build and Test (`rust.yml`)
+### 7. Kubernetes Canary Deploy (`k8s-canary.yml`)
+
+Progressive delivery for HTTP APIs: deploy a canary alongside stable, then `promote` or `abort`.
+Uses `charts/app` with `strategy.mode=canary`. Traffic split is opt-in via Traefik
+(`canary.trafficProvider: traefik` in values); the default exposes canary on a smoke Ingress host
+only. See `EXAMPLES.md` Example 12.
+
+```yaml
+jobs:
+  canary:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-canary.yml@master
+    with:
+      action: deploy   # deploy | promote | abort
+      release-name: my-api
+      namespace: my-api
+      kube-context: local
+      values-file: k8s/values-local.yaml
+      image: ${{ needs.build.outputs.image }}
+      canary-weight: 10
+```
+
+### 8. Kubernetes Blue/Green Deploy (`k8s-bluegreen.yml`)
+
+Slot-based cutover for workers (e.g. Kafka consumers): deploy the new image to the inactive slot,
+then `promote` (flip `activeSlot`) or `abort`. Same consumer `group.id` on both slots; prefer
+`overlap-seconds: 0`. See `EXAMPLES.md` Example 13.
+
+```yaml
+jobs:
+  worker:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-bluegreen.yml@master
+    with:
+      action: deploy   # deploy | promote | abort
+      release-name: my-worker
+      namespace: my-worker
+      kube-context: local
+      values-file: k8s/values-worker.yaml
+      image: ${{ needs.build.outputs.image }}
+```
+
+### 9. Rust Build and Test (`rust.yml`)
 
 Format/lint/build/test for Rust projects (e.g. REST API services). Runs `cargo fmt --check`,
 `cargo clippy`, `cargo build` and `cargo test`, each independently toggleable, with an optional

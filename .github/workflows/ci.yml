@@ -72,6 +72,43 @@ jobs:
             --set podDisruptionBudget.enabled=true \
             --set networkPolicy.enabled=true > /dev/null
 
+      - name: Render chart in canary mode
+        run: |
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=stable \
+            --set strategy.mode=canary \
+            --set canary.image.repository=registry.example.local:5000/test-app \
+            --set canary.image.tag=canary \
+            --set canary.replicas=1 \
+            --set canary.ingress.enabled=true \
+            --set ingress.enabled=true \
+            --set ingress.host=api.local > /dev/null
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=stable \
+            --set strategy.mode=canary \
+            --set canary.trafficProvider=traefik \
+            --set canary.weight=10 \
+            --set canary.image.repository=registry.example.local:5000/test-app \
+            --set canary.image.tag=canary \
+            --set ingress.enabled=true \
+            --set ingress.host=api.local > /dev/null
+
+      - name: Render chart in blueGreen mode
+        run: |
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=blue \
+            --set strategy.mode=blueGreen \
+            --set blueGreen.activeSlot=blue \
+            --set blueGreen.blue.image.repository=registry.example.local:5000/test-app \
+            --set blueGreen.blue.image.tag=blue \
+            --set blueGreen.blue.replicas=1 \
+            --set blueGreen.green.image.repository=registry.example.local:5000/test-app \
+            --set blueGreen.green.image.tag=green \
+            --set blueGreen.green.replicas=1 > /dev/null
+
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest

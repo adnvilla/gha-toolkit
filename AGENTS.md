@@ -15,8 +15,8 @@ traps that are easy to fall into.
 
 1. A set of **reusable GitHub Actions workflows** in `.github/workflows/`, consumed by other repos via
    `uses: adnvilla/gha-toolkit/.github/workflows/<file>.yml@<ref>`.
-2. A **generic Helm chart** in `charts/app/`, pulled by `k8s-deploy.yml` at the same git ref the caller
-   pinned.
+2. A **generic Helm chart** in `charts/app/`, pulled by the k8s deploy workflows at the same git ref
+   the caller pinned.
 
 Everything else (`README`, `ARCHITECTURE`, `EXAMPLES`, `ENVIRONMENTS`, `CONTRIBUTING`, `charts/app/README`)
 documents those two things. There is no build step and no application runtime — "testing" means linting
@@ -32,13 +32,15 @@ backward compatibility matters (see [Change classification](#7-change-classifica
   go.yml                 # Go build/test + PostgreSQL service container
   node.yml               # Node/TS install+build+lint+typecheck+test (pnpm|npm|yarn)
   docker-build-push.yml  # Build a Docker image, push to registry (ghcr/dockerhub/local), outputs `image`
-  k8s-deploy.yml         # Deploy via Helm using charts/app, bound to a GitHub Environment
+  k8s-deploy.yml         # Rolling deploy via Helm using charts/app, bound to a GitHub Environment
+  k8s-canary.yml         # Canary phases (deploy/promote/abort) for HTTP APIs
+  k8s-bluegreen.yml      # Blue/green phases for workers (e.g. Kafka consumers)
   release.yml            # semantic-release runner
   # Internal (govern THIS repo's lifecycle, not reusable):
   ci.yml                 # lint YAML + Markdown, validate chart, validate doc version pins
   auto-release.yml       # workflow_run after CI success on master -> runs release logic (dogfoods release.yml)
   test.yml               # workflow_dispatch smoke test that calls the reusable workflows locally
-charts/app/              # Generic Helm chart (Deployment/Service/Ingress + optional SA/HPA/PDB/NetworkPolicy)
+charts/app/              # Generic Helm chart (rolling/canary/blueGreen + optional SA/HPA/PDB/NetworkPolicy)
 .releaserc.json          # THIS repo's semantic-release config — SOURCE OF TRUTH for release rules
 .releaserc.json.example  # Template consumers copy into their own repo
 .yamllint.yml            # YAML lint rules
@@ -78,6 +80,17 @@ helm template test-release charts/app \
   --set image.tag=test \
   --set serviceAccount.create=true --set autoscaling.enabled=true \
   --set podDisruptionBudget.enabled=true --set networkPolicy.enabled=true > /dev/null
+# Canary + blueGreen modes (match ci.yml validate-chart extras):
+helm template test-release charts/app \
+  --set image.repository=registry.example.local:5000/test-app --set image.tag=stable \
+  --set strategy.mode=canary --set canary.image.repository=registry.example.local:5000/test-app \
+  --set canary.image.tag=canary --set ingress.enabled=true --set ingress.host=api.local > /dev/null
+helm template test-release charts/app \
+  --set image.repository=registry.example.local:5000/test-app --set image.tag=blue \
+  --set strategy.mode=blueGreen --set blueGreen.activeSlot=blue \
+  --set blueGreen.blue.image.repository=registry.example.local:5000/test-app \
+  --set blueGreen.blue.image.tag=blue --set blueGreen.green.image.repository=registry.example.local:5000/test-app \
+  --set blueGreen.green.image.tag=green --set blueGreen.green.replicas=1 > /dev/null
 
 # 4. Release dry-run (optional; needs GITHUB_TOKEN)
 npx semantic-release --dry-run

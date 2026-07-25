@@ -1,0 +1,44 @@
+{{- /* Traefik weighted canary: TraefikService + IngressRoute (requires Traefik CRDs). */ -}}
+{{- if and (eq (include "app.strategyMode" .) "canary") (eq .Values.canary.trafficProvider "traefik") .Values.ingress.enabled .Values.ingress.host -}}
+{{- $canaryWeight := int .Values.canary.weight -}}
+{{- if gt $canaryWeight 100 }}{{ $canaryWeight = 100 }}{{ end -}}
+{{- if lt $canaryWeight 0 }}{{ $canaryWeight = 0 }}{{ end -}}
+{{- $stableWeight := sub 100 $canaryWeight -}}
+apiVersion: traefik.io/v1alpha1
+kind: TraefikService
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  weighted:
+    services:
+      - name: {{ include "app.fullname" . }}
+        port: {{ .Values.service.port }}
+        weight: {{ $stableWeight }}
+      {{- if gt $canaryWeight 0 }}
+      - name: {{ include "app.canary.fullname" . }}
+        port: {{ .Values.service.port }}
+        weight: {{ $canaryWeight }}
+      {{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.canary.traefik.entryPoints | nindent 4 }}
+  routes:
+    - match: Host(`{{ .Values.ingress.host }}`)
+      kind: Rule
+      services:
+        - name: {{ include "app.fullname" . }}
+          kind: TraefikService
+{{- end }}

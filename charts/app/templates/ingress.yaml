@@ -1,4 +1,7 @@
-{{- if .Values.ingress.enabled -}}
+{{- $mode := include "app.strategyMode" . -}}
+{{- /* Standard Ingress for rolling / canary(none). Skipped when canary uses Traefik CRDs. */ -}}
+{{- if and .Values.ingress.enabled (ne $mode "blueGreen") -}}
+{{- if not (and (eq $mode "canary") (eq .Values.canary.trafficProvider "traefik")) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -24,4 +27,5 @@ spec:
                 name: {{ include "app.fullname" . }}
                 port:
                   number: {{ .Values.service.port }}
+{{- end }}
 {{- end }}
