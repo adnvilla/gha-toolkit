@@ -271,7 +271,7 @@ on:
 
 **Inputs:**
 - `toolkit-ref` (string, optional, default `''`): override for the git ref of `adnvilla/gha-toolkit`
-  to pull `charts/app` from. Left empty, it auto-resolves to `job.workflow_sha` (the exact commit this
+  to pull `charts/app` from. Left empty, it auto-resolves to `github.workflow_sha` (the exact commit this
   workflow was called at — see Design Decisions below), so the chart version always matches the
   workflow version with **no input needed**. Only set this to test a chart from a branch. Ignored when
   `use-local-chart` is true.
@@ -303,7 +303,7 @@ on:
 
 1. **deploy:** (job-level `environment: { name: inputs.environment, url: inputs.environment-url }`)
    - Checks out the calling repo at `ref` (for `values-file`) and, unless `use-local-chart`, checks out
-     `${{ job.workflow_repository }}@${{ inputs.toolkit-ref || job.workflow_sha }}` into
+     `adnvilla/gha-toolkit@${{ inputs.toolkit-ref || github.workflow_sha }}` into
      `.gha-toolkit-chart/` to get the chart
    - Selects the `kube-context` (skipped entirely when `dry-run` is true)
    - If `adopt-existing`, deletes any pre-existing `deployment`/`service`/`ingress` matching
@@ -319,8 +319,8 @@ on:
   creates `deployment`/`ingress` before the namespace exists)
 - `--atomic` gives automatic rollback on a failed rollout, which the previous `kubectl set image` +
   `kubectl rollout status` approach didn't have
-- The chart is versioned inside `gha-toolkit` itself and auto-resolved via `job.workflow_repository`/
-  `job.workflow_sha` — the context GitHub documents specifically for a reusable workflow to check out
+- The chart is versioned inside `gha-toolkit` itself and auto-resolved via the fixed toolkit repository/
+  `github.workflow_sha` — the context GitHub documents specifically for a reusable workflow to check out
   its own repo at the exact ref it was called with — so a project pinned to `k8s-deploy.yml@v1.4.0`
   always deploys the exact chart shipped in that tag with zero extra input. This also means a fork of
   `gha-toolkit` works unmodified (no hardcoded `adnvilla/gha-toolkit` string).

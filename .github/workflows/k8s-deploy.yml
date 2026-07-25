@@ -12,7 +12,7 @@ on:
       toolkit-ref:
         description: >-
           Optional override for the git ref of adnvilla/gha-toolkit to pull charts/app from.
-          Defaults to the exact commit this workflow file was called at (via job.workflow_sha),
+          Defaults to the exact commit this workflow file was called at (via github.workflow_sha),
           so the chart version always matches the workflow version with no input needed. Only
           set this to test a chart from a branch. Ignored when use-local-chart is true.
         required: false
@@ -140,8 +140,8 @@ jobs:
         if: ${{ !inputs.use-local-chart }}
         uses: actions/checkout@v7
         with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ inputs.toolkit-ref || job.workflow_sha }}
+          repository: adnvilla/gha-toolkit
+          ref: ${{ inputs.toolkit-ref || github.workflow_sha }}
           path: .gha-toolkit-chart
 
       - name: Setup Helm
