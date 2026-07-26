@@ -50,11 +50,17 @@ jobs:
           # every consumer's release pipeline. Bump deliberately when ready.
           # @semantic-release/exec is intentionally omitted — not used by
           # .releaserc.json (or the consumer .releaserc.json.example).
+          #
+          # The conventionalcommits preset stays on ^9: with the
+          # @semantic-release/release-notes-generator@^14 that semantic-release@^25
+          # depends on, ^10 renders every section empty, so releases still get the
+          # right version bump but ship blank notes and a blank CHANGELOG entry.
+          # Verify with a real commit before raising it.
           npm install -g \
             semantic-release@^25 \
             @semantic-release/git@^10 \
             @semantic-release/changelog@^6 \
-            conventional-changelog-conventionalcommits@^10
+            conventional-changelog-conventionalcommits@^9
 
       - name: Release
         env:
