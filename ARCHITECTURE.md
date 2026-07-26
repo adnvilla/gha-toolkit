@@ -423,7 +423,8 @@ on:
 1. **validate-workflows:** Validates all `.yml` files with `yamllint`
 2. **validate-actions:** Validates GitHub Actions semantics with `actionlint` (pinned Docker image) —
    context/property names, expression types, `needs` references, action input names, and the `run:`
-   scripts via its bundled `shellcheck`. This is what `yamllint` cannot see
+   scripts via its bundled `shellcheck`. This is what `yamllint` cannot see. The same job runs
+   `shellcheck` over `tests/*.sh`, which actionlint never reads
 3. **validate-markdown:** Validates all `.md` files with `markdownlint`
 4. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values
    (rolling, optional resources, canary, canary+traefik, blueGreen), to catch broken chart templates

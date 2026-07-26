@@ -76,6 +76,9 @@ yamllint -c .yamllint.yml .github/workflows/
 # 2. Actions semantics + `run:` scripts (matches ci.yml -> validate-actions).
 # Reads ignore rules from .github/actionlint.yaml. This is the CI command verbatim:
 docker run --rm -v "${PWD}:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+# Same job also lints the standalone test scripts, which actionlint never sees:
+docker run --rm -v "${PWD}:/repo:ro" -w /repo --entrypoint shellcheck \
+  rhysd/actionlint:1.7.12 tests/*.sh
 # Without Docker, install the same version and run `actionlint` (needs shellcheck on PATH):
 #   go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
@@ -137,6 +140,8 @@ Rules when adding to them:
   whole reason these exist.
 - Each script takes an optional workflow path argument, so you can point it at an older revision
   (`git show HEAD:<path> > /tmp/x.yml`) to confirm a new test actually fails before your fix.
+- The scripts themselves are linted by `shellcheck` in `validate-actions` (actionlint only reads `run:`
+  blocks, never standalone `.sh` files), so keep them warning-free.
 
 ### The doc-version-pin gate (easy to miss)
 
@@ -261,8 +266,9 @@ changes, no force-push to protected branches, no `--no-verify`).
 Before considering a change complete:
 
 - [ ] `yamllint -c .yamllint.yml .github/workflows/` passes.
-- [ ] `actionlint` reports nothing; if you silenced a finding, the ignore is scoped and justified (see the
-      `job.workflow_*` trap in section 11 before assuming a finding is real).
+- [ ] `actionlint` reports nothing, and `shellcheck tests/*.sh` is clean; if you silenced a finding, the
+      ignore is scoped and justified (see the `job.workflow_*` trap in section 11 before assuming a
+      finding is real).
 - [ ] `markdownlint . --config .markdownlint.json --ignore node_modules` is clean.
 - [ ] `bash tests/canary-image-resolution.sh` passes; if you touched shell in a `run:` block that
       `dry-run` can't reach, it's covered by a `tests/` script.

@@ -180,6 +180,10 @@ Use the same pinned version CI does; it reads its ignore rules from `.github/act
 
 ```bash
 docker run --rm -v "${PWD}:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+
+# The standalone test scripts, which actionlint never reads:
+docker run --rm -v "${PWD}:/repo:ro" -w /repo --entrypoint shellcheck \
+  rhysd/actionlint:1.7.12 tests/*.sh
 ```
 
 ### Markdown Validation
@@ -249,7 +253,7 @@ Markdown linting configuration. Ensures:
 All PRs go through CI that validates:
 
 1. **YAML Syntax** (`yamllint`)
-2. **GitHub Actions Semantics** (`actionlint`, including `shellcheck` over `run:` blocks)
+2. **GitHub Actions Semantics** (`actionlint`, plus `shellcheck` over `run:` blocks and `tests/*.sh`)
 3. **Markdown Syntax** (`markdownlint`)
 4. **Helm Chart** (`helm lint` + `helm template` in every strategy mode)
 5. **Workflow Shell Logic** (`tests/*.sh`)

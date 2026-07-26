@@ -41,6 +41,13 @@ jobs:
           docker run --rm -v "${PWD}:/repo:ro" -w /repo \
             rhysd/actionlint:1.7.12 -color
 
+      # tests/*.sh are standalone scripts, not `run:` bodies, so actionlint never
+      # looks at them. Reuse the shellcheck the image already carries.
+      - name: Run shellcheck on the shell-logic tests
+        run: |
+          docker run --rm -v "${PWD}:/repo:ro" -w /repo \
+            --entrypoint shellcheck rhysd/actionlint:1.7.12 tests/*.sh
+
   validate-markdown:
     name: Validate Markdown
     runs-on: ubuntu-latest
