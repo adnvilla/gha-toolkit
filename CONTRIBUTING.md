@@ -133,7 +133,7 @@ jobs:
   my-job:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Do something
         run: echo "Using ${{ inputs.my-param }}"
 ```
