@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ inputs.go-version }}
 
@@ -73,11 +73,17 @@ jobs:
       - name: Build
         env:
           BUILD_FLAGS: ${{ inputs.build-flags }}
-        run: go build ${BUILD_FLAGS} ./...
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          go build ${BUILD_FLAGS} ./...
 
       - name: Test
         if: ${{ inputs.run-tests }}
         env:
           POSTGRES_DSN: ${{ inputs.postgres-dsn }}
           TEST_FLAGS: ${{ inputs.test-flags }}
-        run: go test ${TEST_FLAGS} ./...
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          go test ${TEST_FLAGS} ./...

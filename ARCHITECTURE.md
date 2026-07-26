@@ -421,18 +421,24 @@ on:
 **Jobs:**
 
 1. **validate-workflows:** Validates all `.yml` files with `yamllint`
-2. **validate-markdown:** Validates all `.md` files with `markdownlint`
-3. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values
+2. **validate-actions:** Validates GitHub Actions semantics with `actionlint` (pinned Docker image) —
+   context/property names, expression types, `needs` references, action input names, and the `run:`
+   scripts via its bundled `shellcheck`. This is what `yamllint` cannot see. The same job runs
+   `shellcheck` over `tests/*.sh`, which actionlint never reads
+3. **validate-markdown:** Validates all `.md` files with `markdownlint`
+4. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values
    (rolling, optional resources, canary, canary+traefik, blueGreen), to catch broken chart templates
    before they ship in a tag
-4. **validate-shell-logic:** Runs `tests/*.sh`, which extract a workflow step's `run:` body and execute
+5. **validate-shell-logic:** Runs `tests/*.sh`, which extract a workflow step's `run:` body and execute
    it against stubbed `helm`/`kubectl` — the only coverage for branches `dry-run` never reaches
-5. **validate-doc-pins:** Confirms every `workflows/<file>.yml@<ref>` pin in the docs resolves at that
+6. **validate-doc-pins:** Confirms every `workflows/<file>.yml@<ref>` pin in the docs resolves at that
    ref, so a consumer copying an example never gets a broken `uses:`
-6. **ci-complete:** Consolidated status gate over the jobs above (markdown is warning-only)
+7. **ci-complete:** Consolidated status gate over the jobs above (markdown is warning-only)
 
 **Configuration Files:**
 - `.yamllint.yml`: YAML linting rules
+- `.github/actionlint.yaml`: actionlint ignore rules. Currently scoped to the `job.workflow_*` false
+  positive in the k8s workflows, whose properties GitHub added after actionlint's context schema was cut
 - `.markdownlint.json`: Markdown linting rules
 
 **Design Decisions:**
@@ -613,6 +619,9 @@ permissions:
 ```bash
 # Test YAML validation
 yamllint .github/workflows/*.yml
+
+# Test GitHub Actions semantics (same pinned version as CI)
+docker run --rm -v "${PWD}:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
 
 # Test Markdown validation
 markdownlint *.md

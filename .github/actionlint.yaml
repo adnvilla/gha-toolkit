@@ -1,0 +1,22 @@
+---
+# actionlint's `job` context schema (v1.7.12, released 2026-03-30) predates
+# GitHub's April 2026 addition of job.workflow_ref / job.workflow_sha /
+# job.workflow_repository / job.workflow_file_path, so it reports them as
+# undefined properties. They are valid and load-bearing: the k8s workflows use
+# them to check out charts/app from the toolkit repo at the exact ref the caller
+# pinned, which is also what keeps forks working without modification.
+# Verified empirically in gha-toolkit run 30165776297 and navi-admin run
+# 29677058548. See https://github.com/orgs/community/discussions/113568 and the
+# closing comments on issues #29 / #30 — this false positive already caused one
+# attempt to "fix" the valid context, which would have broken every cross-repo
+# consumer. Do not act on it again.
+# TODO: drop this ignore once the pinned actionlint version ships a `job`
+# context schema that includes the workflow_* properties.
+#
+# Run actionlint from the repository root: the glob below is matched against the
+# path as passed in, so invoking it from elsewhere ('actionlint /repo/.github/...'
+# resolved as '../repo/...') stops matching and the false positives come back.
+paths:
+  .github/workflows/k8s-*.yml:
+    ignore:
+      - 'property "workflow_(ref|sha|repository|file_path)" is not defined in object type'
