@@ -12,6 +12,10 @@
 # consumer. Do not act on it again.
 # TODO: drop this ignore once the pinned actionlint version ships a `job`
 # context schema that includes the workflow_* properties.
+#
+# Run actionlint from the repository root: the glob below is matched against the
+# path as passed in, so invoking it from elsewhere ('actionlint /repo/.github/...'
+# resolved as '../repo/...') stops matching and the false positives come back.
 paths:
   .github/workflows/k8s-*.yml:
     ignore:

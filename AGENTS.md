@@ -294,7 +294,8 @@ Before considering a change complete:
   properties are valid (GitHub added them in April 2026) and load-bearing: they resolve the toolkit
   repo/ref for the `charts/app` checkout in the k8s workflows, which is what keeps forks working.
   actionlint's `job` context schema predates them, so it reports `property "workflow_repository" is not
-  defined in object type` — a false positive already silenced in `.github/actionlint.yaml`. Issues #29/#30
+  defined in object type` — a false positive already silenced in `.github/actionlint.yaml` (which only
+  applies when actionlint runs from the repository root, as CI does). Issues #29/#30
   are a full round-trip of someone acting on it: the "fix" (`github.workflow_sha`) resolves to the
   *caller's* commit and breaks the chart checkout for every cross-repo consumer.
 - **Don't quote the `${FLAGS}` expansions in `go`/`node`/`rust` `run:` steps.** They must word-split so a
