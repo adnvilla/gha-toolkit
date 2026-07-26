@@ -172,6 +172,16 @@ helm template charts/app --set image.repository=test --set image.tag=test
 yamllint .github/workflows/*.yml
 ```
 
+### GitHub Actions Validation
+
+`yamllint` only checks YAML style. `actionlint` checks Actions semantics — context and property names,
+expression types, `needs` references, action input names — plus the `run:` scripts via `shellcheck`.
+Use the same pinned version CI does; it reads its ignore rules from `.github/actionlint.yaml`:
+
+```bash
+docker run --rm -v "${PWD}:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+```
+
 ### Markdown Validation
 
 ```bash
@@ -220,6 +230,13 @@ YAML linting configuration. Ensures:
 - Line length limits
 - Proper syntax
 
+### `.github/actionlint.yaml`
+
+actionlint configuration. Holds the ignore rules for known false positives — currently only the
+`job.workflow_*` properties, which GitHub added after actionlint's context schema was cut. Read the
+comment in the file before adding to it: silencing a real finding is how a valid workflow gets "fixed"
+into a broken one.
+
 ### `.markdownlint.json`
 
 Markdown linting configuration. Ensures:
@@ -232,10 +249,11 @@ Markdown linting configuration. Ensures:
 All PRs go through CI that validates:
 
 1. **YAML Syntax** (`yamllint`)
-2. **Markdown Syntax** (`markdownlint`)
-3. **Helm Chart** (`helm lint` + `helm template` in every strategy mode)
-4. **Workflow Shell Logic** (`tests/*.sh`)
-5. **Documentation Version Pins** (every `workflows/*.yml@ref` in the docs resolves)
+2. **GitHub Actions Semantics** (`actionlint`, including `shellcheck` over `run:` blocks)
+3. **Markdown Syntax** (`markdownlint`)
+4. **Helm Chart** (`helm lint` + `helm template` in every strategy mode)
+5. **Workflow Shell Logic** (`tests/*.sh`)
+6. **Documentation Version Pins** (every `workflows/*.yml@ref` in the docs resolves)
 
 PRs cannot be merged if CI fails.
 

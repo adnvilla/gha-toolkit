@@ -99,7 +99,7 @@ jobs:
             -e POSTGRES_DB=postgres \
             -p 5432:5432 \
             "postgres:${POSTGRES_VERSION}"
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if docker exec postgres pg_isready -U postgres > /dev/null 2>&1; then
               echo "PostgreSQL is ready"
               exit 0
@@ -117,17 +117,26 @@ jobs:
         if: ${{ inputs.run-clippy }}
         env:
           CLIPPY_ARGS: ${{ inputs.clippy-args }}
-        run: cargo clippy ${CLIPPY_ARGS}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          cargo clippy ${CLIPPY_ARGS}
 
       - name: Build
         if: ${{ inputs.run-build }}
         env:
           BUILD_FLAGS: ${{ inputs.build-flags }}
-        run: cargo build ${BUILD_FLAGS}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          cargo build ${BUILD_FLAGS}
 
       - name: Test
         if: ${{ inputs.run-tests }}
         env:
           DATABASE_URL: ${{ inputs.database-url }}
           TEST_FLAGS: ${{ inputs.test-flags }}
-        run: cargo test ${TEST_FLAGS}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          cargo test ${TEST_FLAGS}

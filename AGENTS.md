@@ -20,7 +20,7 @@ traps that are easy to fall into.
 
 Everything else (`README`, `ARCHITECTURE`, `EXAMPLES`, `ENVIRONMENTS`, `CONTRIBUTING`, `charts/app/README`)
 documents those two things. There is no build step and no application runtime — "testing" means linting
-YAML/Markdown and rendering the chart. Treat every workflow as a public API consumed by other repos:
+YAML/Actions/Markdown, rendering the chart, and running the shell-logic tests. Treat every workflow as a public API consumed by other repos:
 backward compatibility matters (see [Change classification](#7-change-classification-breaking-vs-non-breaking)).
 
 ## 2. Repo map
@@ -31,13 +31,15 @@ backward compatibility matters (see [Change classification](#7-change-classifica
   go-base.yml            # Go build/test, no external services
   go.yml                 # Go build/test + PostgreSQL service container
   node.yml               # Node/TS install+build+lint+typecheck+test (pnpm|npm|yarn)
+  rust.yml               # Rust fmt/clippy/build/test + optional PostgreSQL container
   docker-build-push.yml  # Build a Docker image, push to registry (ghcr/dockerhub/local), outputs `image`
   k8s-deploy.yml         # Rolling deploy via Helm using charts/app, bound to a GitHub Environment
   k8s-canary.yml         # Canary phases (deploy/promote/abort) for HTTP APIs
   k8s-bluegreen.yml      # Blue/green phases for workers (e.g. Kafka consumers)
   release.yml            # semantic-release runner
   # Internal (govern THIS repo's lifecycle, not reusable):
-  ci.yml                 # lint YAML + Markdown, validate chart, run shell-logic tests, validate doc pins
+  ci.yml                 # lint YAML + Actions semantics + Markdown, validate chart, run shell-logic
+                         # tests, validate doc pins
   auto-release.yml       # workflow_run after CI success on master -> runs release logic (dogfoods release.yml)
   test.yml               # workflow_dispatch smoke test that calls the reusable workflows locally
 charts/app/              # Generic Helm chart (rolling/canary/blueGreen + optional SA/HPA/PDB/NetworkPolicy)
@@ -47,6 +49,7 @@ tests/                   # Shell-logic tests: extract a workflow step's `run:` b
 .releaserc.json.example  # Template consumers copy into their own repo
 .yamllint.yml            # YAML lint rules
 .markdownlint.json       # Markdown lint rules
+.github/actionlint.yaml  # actionlint config — ignore rules (see the job.workflow_* trap in section 11)
 ```
 
 ## 3. Prerequisites
@@ -54,6 +57,8 @@ tests/                   # Shell-logic tests: extract a workflow step's `run:` b
 Local validation needs these tools (match CI versions where it matters):
 
 - `yamllint`
+- `actionlint` (CI pins `v1.7.12` via Docker; locally either `docker` or the pinned binary works — see
+  the harness below. `shellcheck` on `PATH` enables the `run:` script checks; the Docker image bundles it)
 - `markdownlint` (npm `markdownlint-cli`)
 - `helm` (CI uses `v3.16.2`)
 - `python3` with `PyYAML` (for the shell-logic tests in `tests/`)
@@ -65,13 +70,19 @@ Run these before proposing any change. They mirror `ci.yml`'s jobs one-to-one �
 CI should pass too.
 
 ```bash
-# 1. Workflow YAML (matches ci.yml -> validate-workflows)
+# 1. Workflow YAML style (matches ci.yml -> validate-workflows)
 yamllint -c .yamllint.yml .github/workflows/
 
-# 2. Markdown docs (matches ci.yml -> validate-markdown; warning-only in CI, but keep it clean)
+# 2. Actions semantics + `run:` scripts (matches ci.yml -> validate-actions).
+# Reads ignore rules from .github/actionlint.yaml. This is the CI command verbatim:
+docker run --rm -v "${PWD}:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+# Without Docker, install the same version and run `actionlint` (needs shellcheck on PATH):
+#   go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+# 3. Markdown docs (matches ci.yml -> validate-markdown; warning-only in CI, but keep it clean)
 markdownlint . --config .markdownlint.json --ignore node_modules
 
-# 3. Helm chart (matches ci.yml -> validate-chart)
+# 4. Helm chart (matches ci.yml -> validate-chart)
 helm lint charts/app
 helm template test-release charts/app \
   --set image.repository=registry.example.local:5000/test-app \
@@ -95,10 +106,10 @@ helm template test-release charts/app \
   --set blueGreen.blue.image.tag=blue --set blueGreen.green.image.repository=registry.example.local:5000/test-app \
   --set blueGreen.green.image.tag=green --set blueGreen.green.replicas=1 > /dev/null
 
-# 4. Workflow shell logic (matches ci.yml -> validate-shell-logic)
+# 5. Workflow shell logic (matches ci.yml -> validate-shell-logic)
 bash tests/canary-image-resolution.sh
 
-# 5. Release dry-run (optional; needs GITHUB_TOKEN)
+# 6. Release dry-run (optional; needs GITHUB_TOKEN)
 npx semantic-release --dry-run
 ```
 
@@ -106,6 +117,7 @@ Single-file variants while iterating:
 
 ```bash
 yamllint -c .yamllint.yml .github/workflows/go.yml
+docker run --rm -v "${PWD}:/repo:ro" -w /repo rhysd/actionlint:1.7.12 .github/workflows/go.yml
 markdownlint README.md --config .markdownlint.json
 ```
 
@@ -249,6 +261,8 @@ changes, no force-push to protected branches, no `--no-verify`).
 Before considering a change complete:
 
 - [ ] `yamllint -c .yamllint.yml .github/workflows/` passes.
+- [ ] `actionlint` reports nothing; if you silenced a finding, the ignore is scoped and justified (see the
+      `job.workflow_*` trap in section 11 before assuming a finding is real).
 - [ ] `markdownlint . --config .markdownlint.json --ignore node_modules` is clean.
 - [ ] `bash tests/canary-image-resolution.sh` passes; if you touched shell in a `run:` block that
       `dry-run` can't reach, it's covered by a `tests/` script.
@@ -276,5 +290,15 @@ Before considering a change complete:
 - **Don't read piped data with `python3 - <<'EOF'`.** The heredoc *is* stdin, so the pipe is silently
   discarded and `json.load(sys.stdin)` sees EOF. Pass data through the environment and keep stdin for
   the program (`VALUES_JSON="$json" python3 <<'PY'`), as `k8s-canary.yml`/`k8s-bluegreen.yml` do.
-- Markdown lint is warning-only in CI (`ci-complete` doesn't fail on it), but YAML, chart, shell-logic,
-  and doc-pin validation are hard gates — keep them green.
+- **Don't "fix" `job.workflow_repository` / `job.workflow_sha` because actionlint flags them.** Those
+  properties are valid (GitHub added them in April 2026) and load-bearing: they resolve the toolkit
+  repo/ref for the `charts/app` checkout in the k8s workflows, which is what keeps forks working.
+  actionlint's `job` context schema predates them, so it reports `property "workflow_repository" is not
+  defined in object type` — a false positive already silenced in `.github/actionlint.yaml`. Issues #29/#30
+  are a full round-trip of someone acting on it: the "fix" (`github.workflow_sha`) resolves to the
+  *caller's* commit and breaks the chart checkout for every cross-repo consumer.
+- **Don't quote the `${FLAGS}` expansions in `go`/`node`/`rust` `run:` steps.** They must word-split so a
+  consumer can pass several flags in one string input; that's why each carries a
+  `# shellcheck disable=SC2086`. SC2086 stays enabled everywhere else on purpose.
+- Markdown lint is warning-only in CI (`ci-complete` doesn't fail on it), but YAML, Actions semantics,
+  chart, shell-logic, and doc-pin validation are hard gates — keep them green.
