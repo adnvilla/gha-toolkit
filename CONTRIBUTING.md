@@ -185,6 +185,15 @@ helm lint charts/app
 helm template charts/app --set image.repository=test --set image.tag=test
 ```
 
+### Workflow Shell Logic
+
+Needs `python3` with `PyYAML`. Each script extracts a step's `run:` body from the workflow and runs it
+against stubbed `helm`/`kubectl`, covering the branches `test.yml`'s dry-run smoke jobs can't reach:
+
+```bash
+bash tests/canary-image-resolution.sh
+```
+
 ## Versioning
 
 This project follows **Semantic Versioning**:
@@ -224,7 +233,9 @@ All PRs go through CI that validates:
 
 1. **YAML Syntax** (`yamllint`)
 2. **Markdown Syntax** (`markdownlint`)
-3. **Workflow Structure** (GitHub Actions validation)
+3. **Helm Chart** (`helm lint` + `helm template` in every strategy mode)
+4. **Workflow Shell Logic** (`tests/*.sh`)
+5. **Documentation Version Pins** (every `workflows/*.yml@ref` in the docs resolves)
 
 PRs cannot be merged if CI fails.
 

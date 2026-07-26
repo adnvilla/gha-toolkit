@@ -109,6 +109,24 @@ jobs:
             --set blueGreen.green.image.tag=green \
             --set blueGreen.green.replicas=1 > /dev/null
 
+  validate-shell-logic:
+    name: Validate Workflow Shell Logic
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install 'pyyaml~=6.0'
+
+      - name: Test k8s-canary image resolution
+        run: bash tests/canary-image-resolution.sh
+
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest
@@ -165,7 +183,12 @@ jobs:
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [validate-workflows, validate-markdown, validate-chart, validate-doc-pins]
+    needs:
+      - validate-workflows
+      - validate-markdown
+      - validate-chart
+      - validate-shell-logic
+      - validate-doc-pins
     if: always()
     steps:
       - name: Check CI Status
@@ -176,6 +199,10 @@ jobs:
           fi
           if [ "${{ needs.validate-chart.result }}" != "success" ]; then
             echo "Helm chart validation failed"
+            exit 1
+          fi
+          if [ "${{ needs.validate-shell-logic.result }}" != "success" ]; then
+            echo "Workflow shell logic tests failed"
             exit 1
           fi
           if [ "${{ needs.validate-doc-pins.result }}" != "success" ]; then

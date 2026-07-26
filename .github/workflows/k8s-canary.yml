@@ -210,36 +210,39 @@ jobs:
             CHART_DIR=".gha-toolkit-chart/${CHART_PATH}"
           fi
 
-          # Tiny helpers (heredoc bodies share run-block indent so YAML strips cleanly).
-          read_image_fields() {
-            # stdin: helm values JSON; args: top-level key ("image" or "canary")
-            local key="$1"
-            python3 - "$key" <<'PY'
-          import json, sys
-          key = sys.argv[1]
-          v = json.load(sys.stdin)
-          if key == "canary":
-              img = ((v.get("canary") or {}).get("image")) or {}
-          else:
-              img = v.get("image") or {}
-          print(img.get("repository") or "")
-          print(img.get("tag") or "")
-          PY
+          read_release_json() {
+            if [ "${DRY_RUN}" == "true" ]; then
+              echo "{}"
+              return
+            fi
+            if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+              helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json
+            else
+              echo "{}"
+            fi
           }
+
+          VALUES_JSON="$(read_release_json)"
+
+          # Stable + canary images currently recorded in the release (empty when there is none).
+          # Values travel through the environment: `python3 <<'PY'` already owns stdin.
+          eval "$(
+            VALUES_JSON="${VALUES_JSON}" python3 <<'PY'
+          import json, os
+          v = json.loads(os.environ.get("VALUES_JSON") or "{}") or {}
+          img = v.get("image") or {}
+          cimg = (v.get("canary") or {}).get("image") or {}
+          print("CUR_REPO=%r" % (img.get("repository") or ""))
+          print("CUR_TAG=%r" % (img.get("tag") or ""))
+          print("CUR_CANARY_REPO=%r" % (cimg.get("repository") or ""))
+          print("CUR_CANARY_TAG=%r" % (cimg.get("tag") or ""))
+          PY
+          )"
 
           # Resolve stable image: explicit input > current release > canary image (first install).
           STABLE_IMAGE="${STABLE_IMAGE_INPUT}"
-          if [ -z "${STABLE_IMAGE}" ] && [ "${DRY_RUN}" != "true" ]; then
-            if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
-              {
-                read -r CUR_REPO
-                read -r CUR_TAG
-              } < <(helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json \
-                | read_image_fields image)
-              if [ -n "${CUR_REPO}" ] && [ -n "${CUR_TAG}" ]; then
-                STABLE_IMAGE="${CUR_REPO}:${CUR_TAG}"
-              fi
-            fi
+          if [ -z "${STABLE_IMAGE}" ] && [ -n "${CUR_REPO}" ] && [ -n "${CUR_TAG}" ]; then
+            STABLE_IMAGE="${CUR_REPO}:${CUR_TAG}"
           fi
           if [ -z "${STABLE_IMAGE}" ]; then
             STABLE_IMAGE="${IMAGE}"
@@ -289,14 +292,9 @@ jobs:
               ;;
             abort)
               # Keep stable; tear down canary. Prefer canary image from release if present.
-              if [ -z "${CANARY_REPO}" ] && [ "${DRY_RUN}" != "true" ]; then
-                if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
-                  {
-                    read -r CANARY_REPO
-                    read -r CANARY_TAG
-                  } < <(helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json \
-                    | read_image_fields canary)
-                fi
+              if [ -z "${CANARY_REPO}" ] && [ -n "${CUR_CANARY_REPO}" ] && [ -n "${CUR_CANARY_TAG}" ]; then
+                CANARY_REPO="${CUR_CANARY_REPO}"
+                CANARY_TAG="${CUR_CANARY_TAG}"
               fi
               if [ -z "${CANARY_REPO}" ]; then
                 CANARY_REPO="${STABLE_REPO}"
@@ -312,6 +310,9 @@ jobs:
               OUT_STABLE="${STABLE_IMAGE}"
               ;;
           esac
+
+          echo "Resolved stable image: ${STABLE_REPO}:${STABLE_TAG}"
+          echo "Resolved canary image: ${CANARY_REPO}:${CANARY_TAG}"
 
           while IFS= read -r kv; do
             [ -z "$kv" ] && continue
