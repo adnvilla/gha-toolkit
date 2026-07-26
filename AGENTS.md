@@ -37,10 +37,12 @@ backward compatibility matters (see [Change classification](#7-change-classifica
   k8s-bluegreen.yml      # Blue/green phases for workers (e.g. Kafka consumers)
   release.yml            # semantic-release runner
   # Internal (govern THIS repo's lifecycle, not reusable):
-  ci.yml                 # lint YAML + Markdown, validate chart, validate doc version pins
+  ci.yml                 # lint YAML + Markdown, validate chart, run shell-logic tests, validate doc pins
   auto-release.yml       # workflow_run after CI success on master -> runs release logic (dogfoods release.yml)
   test.yml               # workflow_dispatch smoke test that calls the reusable workflows locally
 charts/app/              # Generic Helm chart (rolling/canary/blueGreen + optional SA/HPA/PDB/NetworkPolicy)
+tests/                   # Shell-logic tests: extract a workflow step's `run:` body and run it stubbed
+  canary-image-resolution.sh  # k8s-canary.yml stable/canary image discovery (non-dry-run path)
 .releaserc.json          # THIS repo's semantic-release config — SOURCE OF TRUTH for release rules
 .releaserc.json.example  # Template consumers copy into their own repo
 .yamllint.yml            # YAML lint rules
@@ -54,6 +56,7 @@ Local validation needs these tools (match CI versions where it matters):
 - `yamllint`
 - `markdownlint` (npm `markdownlint-cli`)
 - `helm` (CI uses `v3.16.2`)
+- `python3` with `PyYAML` (for the shell-logic tests in `tests/`)
 - `node` + `npx` (only to dry-run semantic-release)
 
 ## 4. The validation harness
@@ -92,7 +95,10 @@ helm template test-release charts/app \
   --set blueGreen.blue.image.tag=blue --set blueGreen.green.image.repository=registry.example.local:5000/test-app \
   --set blueGreen.green.image.tag=green --set blueGreen.green.replicas=1 > /dev/null
 
-# 4. Release dry-run (optional; needs GITHUB_TOKEN)
+# 4. Workflow shell logic (matches ci.yml -> validate-shell-logic)
+bash tests/canary-image-resolution.sh
+
+# 5. Release dry-run (optional; needs GITHUB_TOKEN)
 npx semantic-release --dry-run
 ```
 
@@ -102,6 +108,23 @@ Single-file variants while iterating:
 yamllint -c .yamllint.yml .github/workflows/go.yml
 markdownlint README.md --config .markdownlint.json
 ```
+
+### The shell-logic tests (`tests/`)
+
+Reusable workflows carry non-trivial `bash` in `run:` blocks, and `test.yml`'s smoke jobs can only
+reach the `dry-run` branches of it. `tests/*.sh` closes that gap: each script extracts a step's `run:`
+body straight out of the workflow YAML (via `PyYAML`) and executes it with `helm`/`kubectl` stubbed on
+`PATH`, asserting on the recorded arguments. Because the body is extracted rather than copied, a test
+can't drift away from the code it covers.
+
+Rules when adding to them:
+
+- Never duplicate workflow logic into the test — extract it by step `name`. Renaming a step breaks its
+  test loudly, which is the intent.
+- Cover the branches `dry-run` skips (anything guarded by `[ "${DRY_RUN}" != "true" ]`); that's the
+  whole reason these exist.
+- Each script takes an optional workflow path argument, so you can point it at an older revision
+  (`git show HEAD:<path> > /tmp/x.yml`) to confirm a new test actually fails before your fix.
 
 ### The doc-version-pin gate (easy to miss)
 
@@ -136,6 +159,11 @@ consumer repo. It calls them via the local `./.github/workflows/` ref with safe 
 - `release.yml` with `dry-run: true`
 - `docker-build-push.yml` build-only (`push: false`)
 - `k8s-deploy.yml` with `dry-run: true` (`helm template`, no cluster contact)
+- `k8s-canary.yml` / `k8s-bluegreen.yml` with `dry-run: true` for every phase
+
+Because every smoke job is a dry run, cluster-facing logic is only reachable from the `tests/`
+shell-logic scripts (see section 4) — `k8s-canary.yml`'s image discovery from the live Helm release is
+covered there, not here.
 
 **Not covered by any automated test:** `adopt-existing: true` in `k8s-deploy.yml` (skipped under
 `dry-run`; needs a disposable cluster/namespace). Validate it manually against a throwaway namespace if
@@ -222,6 +250,8 @@ Before considering a change complete:
 
 - [ ] `yamllint -c .yamllint.yml .github/workflows/` passes.
 - [ ] `markdownlint . --config .markdownlint.json --ignore node_modules` is clean.
+- [ ] `bash tests/canary-image-resolution.sh` passes; if you touched shell in a `run:` block that
+      `dry-run` can't reach, it's covered by a `tests/` script.
 - [ ] If the chart changed: both `helm template` renders pass, `Chart.yaml` version bumped if
       consumer-visible, and `charts/app/README.md` values table updated.
 - [ ] Docs synced: new/changed reusable workflow -> add a usage example to `EXAMPLES.md`, update
@@ -243,5 +273,8 @@ Before considering a change complete:
   promoted staging -> production (see `ENVIRONMENTS.md`).
 - **Keep guidance in one place.** This file is the source of truth for the harness; when in doubt,
   verify against the actual workflow/chart files rather than duplicating guidance elsewhere.
-- Markdown lint is warning-only in CI (`ci-complete` doesn't fail on it), but YAML, chart, and doc-pin
-  validation are hard gates — keep them green.
+- **Don't read piped data with `python3 - <<'EOF'`.** The heredoc *is* stdin, so the pipe is silently
+  discarded and `json.load(sys.stdin)` sees EOF. Pass data through the environment and keep stdin for
+  the program (`VALUES_JSON="$json" python3 <<'PY'`), as `k8s-canary.yml`/`k8s-bluegreen.yml` do.
+- Markdown lint is warning-only in CI (`ci-complete` doesn't fail on it), but YAML, chart, shell-logic,
+  and doc-pin validation are hard gates — keep them green.

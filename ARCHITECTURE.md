@@ -346,6 +346,10 @@ canary), `promote` (canary → stable), `abort` (scale canary to 0). Uses `chart
 - Promote/abort are separate workflow calls so GitHub Environments can gate cutover
 - Stable image is preserved from the release (or `stable-image`) on deploy; canary never joins the
   stable Service (distinct instance label)
+- Both stable and canary images are read from the release's computed values in a single
+  `helm get values -a -o json` pass (dry-run parses `{}` instead of skipping, so the path stays
+  testable) and the resolved references are logged; resolution order is `stable-image` > current
+  release > `image`, and a release without an `image` key falls back instead of failing the step
 - Weighted traffic requires `canary.trafficProvider: traefik` in values (Traefik CRDs); default is
   smoke-host only (`canary.ingress`)
 
@@ -421,7 +425,11 @@ on:
 3. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values
    (rolling, optional resources, canary, canary+traefik, blueGreen), to catch broken chart templates
    before they ship in a tag
-4. **ci-complete:** Consolidated status gate over the three jobs above
+4. **validate-shell-logic:** Runs `tests/*.sh`, which extract a workflow step's `run:` body and execute
+   it against stubbed `helm`/`kubectl` — the only coverage for branches `dry-run` never reaches
+5. **validate-doc-pins:** Confirms every `workflows/<file>.yml@<ref>` pin in the docs resolves at that
+   ref, so a consumer copying an example never gets a broken `uses:`
+6. **ci-complete:** Consolidated status gate over the jobs above (markdown is warning-only)
 
 **Configuration Files:**
 - `.yamllint.yml`: YAML linting rules
