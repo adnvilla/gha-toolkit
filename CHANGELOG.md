@@ -1,3 +1,9 @@
+## [1.6.6](https://github.com/adnvilla/gha-toolkit/compare/v1.6.5...v1.6.6) (2026-07-27)
+
+### 🐛 Bug Fixes
+
+* migrate workflow actions to Node 24 ([97324d4](https://github.com/adnvilla/gha-toolkit/commit/97324d4b55dc35d1b83ac5247624254e6d1aabd0))
+
 ## [1.6.5](https://github.com/adnvilla/gha-toolkit/compare/v1.6.4...v1.6.5) (2026-07-27)
 
 ### 🐛 Bug Fixes
