@@ -50,11 +50,15 @@ tests/                   # Shell-logic tests: extract a workflow step's `run:` b
 .yamllint.yml            # YAML lint rules
 .markdownlint.json       # Markdown lint rules
 .github/actionlint.yaml  # actionlint config — ignore rules (see the job.workflow_* trap in section 11)
+.cursor/environment.json # Cursor cloud-agent env: runs install.sh on every VM boot
+.cursor/install.sh       # Provisions the tools below (idempotent; cold ~4s, warm ~0.1s)
 ```
 
 ## 3. Prerequisites
 
-Local validation needs these tools (match CI versions where it matters):
+Local validation needs these tools (match CI versions where it matters). On a Cursor cloud agent they
+are already installed: `.cursor/environment.json` runs `.cursor/install.sh` on every VM boot, so do
+not reinstall them by hand — just run the harness in section 4.
 
 - `yamllint`
 - `actionlint` (CI pins `v1.7.12` via Docker; locally either `docker` or the pinned binary works — see
