@@ -77,6 +77,8 @@ CI should pass too.
 ```bash
 # 1. Workflow YAML style (matches ci.yml -> validate-workflows)
 yamllint -c .yamllint.yml .github/workflows/
+# The same job rejects known action releases that still embed Node.js 20:
+bash tests/action-node24-versions.sh
 
 # 2. Actions semantics + `run:` scripts (matches ci.yml -> validate-actions).
 # Reads ignore rules from .github/actionlint.yaml. This is the CI command verbatim:
@@ -278,6 +280,8 @@ Before considering a change complete:
 - [ ] `markdownlint . --config .markdownlint.json --ignore node_modules` is clean.
 - [ ] `bash tests/canary-image-resolution.sh` passes; if you touched shell in a `run:` block that
       `dry-run` can't reach, it's covered by a `tests/` script.
+- [ ] `bash tests/action-node24-versions.sh` passes so JavaScript actions cannot regress to a
+      Node.js 20 runtime.
 - [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.
 - [ ] If the chart changed: both `helm template` renders pass, `Chart.yaml` version bumped if
       consumer-visible, and `charts/app/README.md` values table updated.

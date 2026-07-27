@@ -24,6 +24,9 @@ jobs:
           file_or_dir: .github/workflows/
           strict: false
 
+      - name: Reject actions that still use Node.js 20
+        run: bash tests/action-node24-versions.sh
+
   validate-actions:
     name: Validate Workflow Semantics
     runs-on: ubuntu-latest
@@ -70,7 +73,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: v3.16.2
 

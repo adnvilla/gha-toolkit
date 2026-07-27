@@ -41,14 +41,16 @@ This toolkit uses automatic semantic versioning:
 # Specific version (RECOMMENDED for production)
 uses: adnvilla/gha-toolkit/.github/workflows/go.yml@v1.0.0
 
-# Latest 1.x version (auto-updates)
-uses: adnvilla/gha-toolkit/.github/workflows/go.yml@v1
-
 # Latest version (development)
 uses: adnvilla/gha-toolkit/.github/workflows/go.yml@master
 ```
 
 Each commit with `feat:` or `fix:` automatically generates a new version.
+
+Consumers upgrade deliberately by changing their full version pin after validating the new release.
+Existing tags, including the historical `v1` alias, are not moved automatically. This keeps every
+consumer's rollout explicit and reproducible. When upgrading from an older release, review the release
+notes and confirm that self-hosted runners meet the requirements of the actions used by that release.
 
 ## 📋 Available Workflows
 

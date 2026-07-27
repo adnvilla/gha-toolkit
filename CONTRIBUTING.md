@@ -206,7 +206,11 @@ against stubbed `helm`/`kubectl`, covering the branches `test.yml`'s dry-run smo
 
 ```bash
 bash tests/canary-image-resolution.sh
+bash tests/k8s-image-references.sh
 ```
+
+Run `bash tests/action-node24-versions.sh` separately to ensure workflow dependencies do not regress
+to action releases that embed Node.js 20.
 
 ## Versioning
 
