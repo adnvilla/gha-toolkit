@@ -18,7 +18,7 @@ This document covers:
 `k8s-deploy.yml` has two new inputs:
 
 | Input | Default | What it does |
-|---|---|---|
+| --- | --- | --- |
 | `environment` | `'production'` | GitHub Environment name for this deployment |
 | `environment-url` | `''` | Optional clickable URL shown next to the environment in the Actions UI |
 

@@ -45,6 +45,7 @@ backward compatibility matters (see [Change classification](#7-change-classifica
 charts/app/              # Generic Helm chart (rolling/canary/blueGreen + optional SA/HPA/PDB/NetworkPolicy)
 tests/                   # Shell-logic tests: extract a workflow step's `run:` body and run it stubbed
   canary-image-resolution.sh  # k8s-canary.yml stable/canary image discovery (non-dry-run path)
+  k8s-image-references.sh     # k8s workflow image parsing + rendered-reference regressions
 .releaserc.json          # THIS repo's semantic-release config — SOURCE OF TRUTH for release rules
 .releaserc.json.example  # Template consumers copy into their own repo
 .yamllint.yml            # YAML lint rules
@@ -115,6 +116,7 @@ helm template test-release charts/app \
 
 # 5. Workflow shell logic (matches ci.yml -> validate-shell-logic)
 bash tests/canary-image-resolution.sh
+bash tests/k8s-image-references.sh
 
 # 6. Release dry-run (optional; needs GITHUB_TOKEN)
 npx semantic-release --dry-run
@@ -276,6 +278,7 @@ Before considering a change complete:
 - [ ] `markdownlint . --config .markdownlint.json --ignore node_modules` is clean.
 - [ ] `bash tests/canary-image-resolution.sh` passes; if you touched shell in a `run:` block that
       `dry-run` can't reach, it's covered by a `tests/` script.
+- [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.
 - [ ] If the chart changed: both `helm template` renders pass, `Chart.yaml` version bumped if
       consumer-visible, and `charts/app/README.md` values table updated.
 - [ ] Docs synced: new/changed reusable workflow -> add a usage example to `EXAMPLES.md`, update

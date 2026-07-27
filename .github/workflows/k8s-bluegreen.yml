@@ -57,7 +57,8 @@ on:
       image:
         description: >-
           Full image reference for the inactive slot (action=deploy) or the image being
-          promoted. Required for deploy and promote; optional for abort.
+          promoted. References without a tag use latest. Required for deploy and promote;
+          optional for abort.
         required: false
         type: string
         default: ''
@@ -274,8 +275,12 @@ jobs:
           IMAGE_REPO=""
           IMAGE_TAG=""
           if [ -n "${IMAGE}" ]; then
-            IMAGE_REPO="${IMAGE%:*}"
-            IMAGE_TAG="${IMAGE##*:}"
+            IMAGE_REPO="${IMAGE}"
+            IMAGE_TAG="latest"
+            if [[ "${IMAGE}" == *:* ]]; then
+              IMAGE_REPO="${IMAGE%:*}"
+              IMAGE_TAG="${IMAGE##*:}"
+            fi
           fi
 
           # Defaults when no prior release (dry-run / first install).

@@ -55,7 +55,8 @@ on:
       image:
         description: >-
           Full image reference for the canary (action=deploy) or the image to promote to
-          stable (action=promote). Ignored for abort unless you also pass stable-image.
+          stable (action=promote). References without a tag use latest. Ignored for abort
+          unless you also pass stable-image.
         required: false
         type: string
         default: ''
@@ -63,6 +64,7 @@ on:
         description: >-
           Optional full image reference for the stable Deployment. When empty on deploy,
           the workflow keeps the release's current image (or uses image if no release yet).
+          References without a tag use latest.
         required: false
         type: string
         default: ''
@@ -248,14 +250,26 @@ jobs:
             STABLE_IMAGE="${IMAGE}"
           fi
 
-          STABLE_REPO="${STABLE_IMAGE%:*}"
-          STABLE_TAG="${STABLE_IMAGE##*:}"
+          split_image_ref() {
+            local ref="$1"
+            PARSED_REPO="${ref}"
+            PARSED_TAG="latest"
+            if [[ "${ref}" == *:* ]]; then
+              PARSED_REPO="${ref%:*}"
+              PARSED_TAG="${ref##*:}"
+            fi
+          }
+
+          split_image_ref "${STABLE_IMAGE}"
+          STABLE_REPO="${PARSED_REPO}"
+          STABLE_TAG="${PARSED_TAG}"
 
           CANARY_REPO=""
           CANARY_TAG=""
           if [ -n "${IMAGE}" ]; then
-            CANARY_REPO="${IMAGE%:*}"
-            CANARY_TAG="${IMAGE##*:}"
+            split_image_ref "${IMAGE}"
+            CANARY_REPO="${PARSED_REPO}"
+            CANARY_TAG="${PARSED_TAG}"
           fi
 
           RENDER_ARGS=(

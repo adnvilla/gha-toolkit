@@ -151,6 +151,9 @@ jobs:
       - name: Test k8s-canary image resolution
         run: bash tests/canary-image-resolution.sh
 
+      - name: Test Kubernetes image references
+        run: bash tests/k8s-image-references.sh
+
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest

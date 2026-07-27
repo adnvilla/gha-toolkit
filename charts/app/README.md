@@ -22,7 +22,7 @@ selection and image parsing for you.
 ## Deployment strategies
 
 | `strategy.mode` | Workflow | Behaviour |
-|---|---|---|
+| --- | --- | --- |
 | `rolling` (default) | `k8s-deploy.yml` | Single Deployment/Service/Ingress — unchanged from earlier chart versions |
 | `canary` | `k8s-canary.yml` | Stable Deployment + canary Deployment/Service; promote/abort via workflow `action` |
 | `blueGreen` | `k8s-bluegreen.yml` | `-blue` / `-green` Deployments; Service selects `blueGreen.activeSlot` |
@@ -57,7 +57,7 @@ the mode on a new release name, or delete the old Deployment/Service first (same
 ## Values
 
 | Key | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `nameOverride` | `""` | Override the chart name used in generated resource names |
 | `fullnameOverride` | `""` | Override the fully computed release name |
 | `replicaCount` | `1` | Number of pod replicas (rolling / canary stable) |
