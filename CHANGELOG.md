@@ -1,3 +1,9 @@
+## [1.6.4](https://github.com/adnvilla/gha-toolkit/compare/v1.6.3...v1.6.4) (2026-07-27)
+
+### 📚 Documentation
+
+* point agents at .cursor/install.sh for the harness ([a85a6b9](https://github.com/adnvilla/gha-toolkit/commit/a85a6b9f864098bb6887ba6873e0973cb649677d)), closes [#35](https://github.com/adnvilla/gha-toolkit/issues/35) [#36](https://github.com/adnvilla/gha-toolkit/issues/36)
+
 ## [1.6.3](https://github.com/adnvilla/gha-toolkit/compare/v1.6.2...v1.6.3) (2026-07-27)
 
 ### 🐛 Bug Fixes
