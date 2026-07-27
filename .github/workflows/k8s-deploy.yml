@@ -56,7 +56,9 @@ on:
         required: true
         type: string
       image:
-        description: 'Full image reference, e.g. registry.example.local:5001/my-app:abc1234'
+        description: >-
+          Full image reference, e.g. registry.example.local:5001/my-app:abc1234.
+          References without a tag use latest.
         required: true
         type: string
       helm-set:
@@ -188,8 +190,12 @@ jobs:
             CHART_DIR=".gha-toolkit-chart/${CHART_PATH}"
           fi
 
-          IMAGE_REPO="${IMAGE%:*}"
-          IMAGE_TAG="${IMAGE##*:}"
+          IMAGE_REPO="${IMAGE}"
+          IMAGE_TAG="latest"
+          if [[ "${IMAGE}" == *:* ]]; then
+            IMAGE_REPO="${IMAGE%:*}"
+            IMAGE_TAG="${IMAGE##*:}"
+          fi
 
           # Shared flags for both template (dry-run) and upgrade paths.
           # helm-set overrides are appended after the image --set so callers can

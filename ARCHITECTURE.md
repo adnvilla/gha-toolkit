@@ -280,7 +280,8 @@ on:
   `workflow_run`-triggered CD is the default branch HEAD, **not** the commit that triggered the event.
   Pass `github.event.workflow_run.head_sha` explicitly in that case (see `EXAMPLES.md` Example 8).
 - `use-local-chart` (boolean, default false) / `chart-path` (string, default `charts/app`)
-- `release-name`, `namespace`, `kube-context`, `values-file`, `image` (all string, required)
+- `release-name`, `namespace`, `kube-context`, `values-file`, `image` (all string, required);
+  image references without an explicit tag use `latest`
 - `helm-set` (string, one `KEY=VALUE` per line, for one-off overrides)
 - `wait` / `atomic` (boolean, default true), `timeout` (string, default `180s`)
 - `helm-version` (string, default `v3.16.2`, installed via `azure/setup-helm` if not already present)
@@ -308,7 +309,8 @@ on:
    - Selects the `kube-context` (skipped entirely when `dry-run` is true)
    - If `adopt-existing`, deletes any pre-existing `deployment`/`service`/`ingress` matching
      `release-name` in `namespace`
-   - Splits `image` into `image.repository`/`image.tag` and runs
+   - Splits `image` into `image.repository`/`image.tag` (using `latest` when the reference
+     contains no colon) and runs
      `helm upgrade --install --create-namespace -f <values-file> --set image.repository=... --set image.tag=... --wait --atomic`
      (or `helm template` with the same values/`--set` flags when `dry-run` is true — no
      `--create-namespace`/`--wait`/`--atomic`/`--timeout`, and no cluster contact)
@@ -529,7 +531,7 @@ Conventional Commit → Commit Analyzer → Version Calculator → Tag Creator �
 **Commit Types → Version Impact** (per the `commit-analyzer` `releaseRules` in `.releaserc.json`):
 
 | Type | Example | Version Change |
-|------|---------|----------------|
+| --- | --- | --- |
 | `feat:` | `feat: add new input` | 1.0.0 → 1.1.0 (MINOR) |
 | `fix:` | `fix: correct validation` | 1.0.0 → 1.0.1 (PATCH) |
 | `perf:` | `perf: reduce checkout time` | 1.0.0 → 1.0.1 (PATCH) |

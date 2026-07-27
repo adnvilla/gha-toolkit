@@ -221,6 +221,9 @@ jobs:
       # see ENVIRONMENTS.md
 ```
 
+The Kubernetes workflows accept tagged references, digest references, and registries with a port.
+An image reference without an explicit tag uses `latest`.
+
 See `charts/app/README.md` for the full values reference, `ENVIRONMENTS.md` for staging/production
 setup, and `EXAMPLES.md` for a complete CI → build → deploy pipeline.
 
