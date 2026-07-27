@@ -1,3 +1,9 @@
+## [1.6.5](https://github.com/adnvilla/gha-toolkit/compare/v1.6.4...v1.6.5) (2026-07-27)
+
+### 🐛 Bug Fixes
+
+* handle untagged Kubernetes image references ([#39](https://github.com/adnvilla/gha-toolkit/issues/39)) ([37f93d5](https://github.com/adnvilla/gha-toolkit/commit/37f93d5c6eb94f9a20de7b8543a0e7cfd764f726)), closes [#33](https://github.com/adnvilla/gha-toolkit/issues/33)
+
 ## [1.6.4](https://github.com/adnvilla/gha-toolkit/compare/v1.6.3...v1.6.4) (2026-07-27)
 
 ### 📚 Documentation
