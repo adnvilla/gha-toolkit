@@ -307,5 +307,10 @@ Before considering a change complete:
 - **Don't quote the `${FLAGS}` expansions in `go`/`node`/`rust` `run:` steps.** They must word-split so a
   consumer can pass several flags in one string input; that's why each carries a
   `# shellcheck disable=SC2086`. SC2086 stays enabled everywhere else on purpose.
+- **Don't raise `conventional-changelog-conventionalcommits` past `^9`** in `release.yml` without
+  checking the notes of the release it produces. Paired with the
+  `@semantic-release/release-notes-generator@^14` that `semantic-release@^25` pulls in, `^10` renders
+  every section empty: the version bump is still correct, so nothing fails — you just get releases and
+  `CHANGELOG.md` entries with no content, which is how v1.4.0 through v1.6.2 shipped blank.
 - Markdown lint is warning-only in CI (`ci-complete` doesn't fail on it), but YAML, Actions semantics,
   chart, shell-logic, and doc-pin validation are hard gates — keep them green.
