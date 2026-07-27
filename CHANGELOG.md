@@ -1,3 +1,9 @@
+## [1.6.3](https://github.com/adnvilla/gha-toolkit/compare/v1.6.2...v1.6.3) (2026-07-27)
+
+### 🐛 Bug Fixes
+
+* restore release notes by pinning the changelog preset to ^9 ([#37](https://github.com/adnvilla/gha-toolkit/issues/37)) ([c1ec1aa](https://github.com/adnvilla/gha-toolkit/commit/c1ec1aa3b171f049e6135b5f466d1270defd9469))
+
 ## [1.6.2](https://github.com/adnvilla/gha-toolkit/compare/v1.6.1...v1.6.2) (2026-07-26)
 
 ## [1.6.1](https://github.com/adnvilla/gha-toolkit/compare/v1.6.0...v1.6.1) (2026-07-26)
