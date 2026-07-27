@@ -422,7 +422,8 @@ on:
 
 **Jobs:**
 
-1. **validate-workflows:** Validates all `.yml` files with `yamllint`
+1. **validate-workflows:** Validates all `.yml` files with `yamllint` and rejects known JavaScript
+   action releases that still embed Node.js 20
 2. **validate-actions:** Validates GitHub Actions semantics with `actionlint` (pinned Docker image) —
    context/property names, expression types, `needs` references, action input names, and the `run:`
    scripts via its bundled `shellcheck`. This is what `yamllint` cannot see. The same job runs
@@ -431,8 +432,9 @@ on:
 4. **validate-chart:** `helm lint charts/app` and `helm template charts/app` with sample values
    (rolling, optional resources, canary, canary+traefik, blueGreen), to catch broken chart templates
    before they ship in a tag
-5. **validate-shell-logic:** Runs `tests/*.sh`, which extract a workflow step's `run:` body and execute
-   it against stubbed `helm`/`kubectl` — the only coverage for branches `dry-run` never reaches
+5. **validate-shell-logic:** Runs the workflow shell-logic tests, which extract a workflow step's
+   `run:` body and execute it against stubbed `helm`/`kubectl` — the only coverage for branches
+   `dry-run` never reaches
 6. **validate-doc-pins:** Confirms every `workflows/<file>.yml@<ref>` pin in the docs resolves at that
    ref, so a consumer copying an example never gets a broken `uses:`
 7. **ci-complete:** Consolidated status gate over the jobs above (markdown is warning-only)
@@ -702,8 +704,8 @@ https://github.com/adnvilla/gha-toolkit/releases
 
 ### Backward Compatibility
 
-- Version tags are immutable
-- Consumers should pin to specific versions
+- Version tags are immutable, including the historical `v1` alias
+- Consumers should pin to full versions and upgrade those pins explicitly
 - Major version updates documented clearly
 
 ## References
