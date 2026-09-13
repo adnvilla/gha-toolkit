@@ -117,6 +117,18 @@ blueGreen:
     image:
       repository: ""
       tag: ""
+  # Preview Service (and optional Ingress) pointing at the INACTIVE slot, so the new
+  # version can be smoke-tested before promote. Default off.
+  preview:
+    enabled: false
+    ingress:
+      enabled: false
+      # Defaults to "preview.<ingress.host>" when empty and ingress.host is set.
+      host: ""
+      path: /
+      pathType: Prefix
+      # className: "" # falls back to ingress.className
+      annotations: {}
 
 # Opt-in resources (default off — existing consumers see no change).
 serviceAccount:
@@ -149,3 +161,72 @@ networkPolicy:
   # Egress: empty = allow all (no egress rules rendered). Set to restrict.
   # Use [{ }] for "allow all egress" explicitly, or concrete rules.
   egress: []
+
+# One-off Job (migration, backfill, seed). Off by default: k8s-job.yml turns it on for a
+# single run via --set. Anything not set here is inherited from the top-level values
+# (image, env, envFrom, resources, serviceAccount, imagePullSecrets, scheduling blocks).
+job:
+  enabled: false
+  # Name segment of the Job (…-<name>) and of the container.
+  name: job
+  # Extra suffix appended by k8s-job.yml so repeat runs never collide.
+  nameSuffix: ""
+  image:
+    repository: "" # defaults to image.repository
+    tag: "" # defaults to image.tag
+    pullPolicy: "" # defaults to image.pullPolicy
+  command: []
+  args: []
+  # Appended to the top-level env / envFrom (job entries win at runtime).
+  env: []
+  envFrom: []
+  resources: {} # defaults to the top-level resources
+  restartPolicy: Never
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  # activeDeadlineSeconds: 600
+  # parallelism: 1
+  # completions: 1
+  annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+
+# Migration Job run as a Helm pre-install/pre-upgrade hook: `helm upgrade` waits for it and
+# aborts the release if it fails. Same shape as `job`. Off by default.
+migrations:
+  enabled: false
+  name: migrations
+  nameSuffix: ""
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  command: []
+  args: []
+  env: []
+  envFrom: []
+  resources: {}
+  restartPolicy: Never
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  # activeDeadlineSeconds: 600
+  hook: pre-install,pre-upgrade
+  hookWeight: "-5"
+  hookDeletePolicy: before-hook-creation
+  annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+
+# Scheduled CronJobs, deployed with the app. Each entry takes the same fields as `job`
+# (minus enabled/nameSuffix) plus `schedule`; `name` and `schedule` are required.
+cronJobs: []
+# - name: cleanup
+#   schedule: "0 3 * * *"
+#   command: ["/app/bin/cleanup"]
+#   concurrencyPolicy: Forbid # Allow | Forbid | Replace
+#   suspend: false
+#   successfulJobsHistoryLimit: 3
+#   failedJobsHistoryLimit: 1
+#   # timeZone: America/Mexico_City
+#   # startingDeadlineSeconds: 120
+#   # enabled: false # render nothing for this entry

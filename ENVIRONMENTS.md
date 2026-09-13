@@ -119,7 +119,9 @@ CI succeeds on `main`, per `EXAMPLES.md`'s Example 8). Nothing in this recipe ch
 production deploys.
 
 **Build once, deploy many**: notice `docker-build-push.yml` isn't touched by this guide at all —
-`environment` only exists on `k8s-deploy.yml`. The same image built once should be the one promoted from
+`environment` only exists on the deploy-side workflows (`k8s-deploy.yml`, `k8s-canary.yml`,
+`k8s-bluegreen.yml`, `k8s-job.yml` — the last one means a production migration or backfill goes
+through the same approval gate as a deploy). The same image built once should be the one promoted from
 staging to production; don't rebuild per environment, or you risk staging validating a slightly
 different artifact than what actually ships.
 

@@ -135,6 +135,53 @@ jobs:
             --set blueGreen.green.image.repository=registry.example.local:5000/test-app \
             --set blueGreen.green.image.tag=green \
             --set blueGreen.green.replicas=1 > /dev/null
+          # Same mode with the preview Service/Ingress, an HPA and a PDB on the active slot.
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=blue \
+            --set strategy.mode=blueGreen \
+            --set blueGreen.activeSlot=blue \
+            --set blueGreen.blue.image.repository=registry.example.local:5000/test-app \
+            --set blueGreen.blue.image.tag=blue \
+            --set blueGreen.green.image.repository=registry.example.local:5000/test-app \
+            --set blueGreen.green.image.tag=green \
+            --set blueGreen.green.replicas=1 \
+            --set blueGreen.preview.enabled=true \
+            --set blueGreen.preview.ingress.enabled=true \
+            --set ingress.enabled=true \
+            --set ingress.host=api.local \
+            --set autoscaling.enabled=true \
+            --set podDisruptionBudget.enabled=true > /dev/null
+
+      - name: Render Job, migrations hook and CronJobs
+        run: |
+          # One-off Job as k8s-job.yml renders it (default off, so this is the only coverage).
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=test \
+            --set job.enabled=true \
+            --set job.name=migrate \
+            --set job.nameSuffix=ci \
+            --set-json 'job.command=["/app/bin/migrate","up"]' \
+            --show-only templates/job.yaml > /dev/null
+          # Migration Job as the pre-upgrade Helm hook used by k8s-deploy.yml.
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=test \
+            --set migrations.enabled=true \
+            --set-json 'migrations.command=["/app/bin/migrate"]' \
+            --show-only templates/job-migrations.yaml > /dev/null
+          # CronJobs, including the per-entry disable switch.
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=test \
+            --set cronJobs[0].name=cleanup \
+            --set cronJobs[0].schedule='0 3 * * *' \
+            --set-json 'cronJobs[0].command=["/app/bin/cleanup"]' \
+            --set cronJobs[1].name=report \
+            --set cronJobs[1].schedule='@daily' \
+            --set cronJobs[1].enabled=false \
+            --show-only templates/cronjob.yaml > /dev/null
 
   validate-shell-logic:
     name: Validate Workflow Shell Logic
@@ -156,6 +203,12 @@ jobs:
 
       - name: Test Kubernetes image references
         run: bash tests/k8s-image-references.sh
+
+      - name: Test k8s-bluegreen slot flipping
+        run: bash tests/bluegreen-slot-flip.sh
+
+      - name: Test k8s-job execution
+        run: bash tests/k8s-job-run.sh
 
   validate-doc-pins:
     name: Validate Documentation Version Pins

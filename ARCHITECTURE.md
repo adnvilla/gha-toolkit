@@ -282,6 +282,11 @@ on:
 - `use-local-chart` (boolean, default false) / `chart-path` (string, default `charts/app`)
 - `release-name`, `namespace`, `kube-context`, `values-file`, `image` (all string, required);
   image references without an explicit tag use `latest`
+- `migrations` (string, default `''`): `'true'` enables the chart's migration Job (a Helm
+  `pre-install,pre-upgrade` hook, so `helm upgrade` blocks on it and aborts the release if it fails),
+  `'false'` disables it, and `''` leaves whatever the values file sets. Deliberately a tri-state
+  string rather than a boolean: a boolean default of `false` would silently override a values file
+  that enables migrations. The Job inherits the image being deployed.
 - `helm-set` (string, one `KEY=VALUE` per line, for one-off overrides)
 - `wait` / `atomic` (boolean, default true), `timeout` (string, default `180s`)
 - `helm-version` (string, default `v3.16.2`, installed via `azure/setup-helm` if not already present)
@@ -357,17 +362,57 @@ canary), `promote` (canary → stable), `abort` (scale canary to 0). Uses `chart
 
 ### k8s-bluegreen.yml
 
-**Purpose:** Blue/green cutover for workers (e.g. Kafka consumers). Phases: `deploy` (image on
-inactive slot), `promote` (flip `activeSlot`), `abort` (scale inactive to 0). Uses
-`strategy.mode=blueGreen`.
+**Purpose:** Blue/green cutover for workers (e.g. Kafka consumers) and for HTTP APIs. Phases:
+`deploy` (image on inactive slot), `promote` (flip `activeSlot`), `abort` (scale inactive to 0),
+plus `status` (read-only). Uses `strategy.mode=blueGreen`.
 
 **Key inputs:** `action`, deploy inputs, `active-slot`, `active-replicas`, `inactive-replicas`,
-`overlap-seconds` (prefer `0`). Outputs `active-slot`, `deployed-slot`, `image`.
+`overlap-seconds` (prefer `0`), `preview`, `verify-url`, `verify-expect-status`,
+`verify-timeout-seconds`, `verify-interval-seconds`, `auto-abort`. Outputs `active-slot`,
+`inactive-slot`, `deployed-slot`, `image`.
 
 **Design Decisions:**
 - Toolkit never talks to Kafka — apps share `group.id`; document idempotency if using overlap
 - Service selector tracks `blueGreen.activeSlot` only
 - Injects `DEPLOYMENT_SLOT` env for observability
+- `status` exits before any `helm` call: CD that must choose between deploy and promote can read the
+  live slots without a side effect on the release
+- `preview: true` sets `blueGreen.preview.enabled` on the chart, giving the inactive slot its own
+  Service/Ingress. It is only ever forced *on* — leaving the input false lets the values file decide,
+  so the workflow can't turn off a preview a consumer configured deliberately
+- `verify-url` polls with `curl` until it returns `verify-expect-status`. With `auto-abort` a failed
+  verification after `deploy` re-applies the abort state (inactive slot back to 0) before failing the
+  job, so a bad image never sits half-deployed. Verification is skipped under `dry-run`, which never
+  reaches a cluster
+- `--set` arguments are built by a single `build_render_args` function because promote with an
+  overlap window applies twice with different replica counts; a second literal copy had already
+  drifted once
+
+### k8s-job.yml
+
+**Purpose:** One-off Kubernetes Jobs (migrations, backfills, seeds) and CronJob operations.
+Actions: `run`, `trigger-cronjob`, `suspend-cronjob`, `resume-cronjob`.
+
+**Key inputs:** `action`, chart/values inputs shared with `k8s-deploy.yml`, `job-name`,
+`name-suffix`, `command`, `args`, `cronjob-name`, `timeout-seconds`, `poll-interval-seconds`,
+`tail-lines`, `delete-on-success`. Outputs `action`, `job-name`, `status`.
+
+**Design Decisions:**
+- The Job is rendered from `charts/app` with `--set job.enabled=true --show-only templates/job.yaml`
+  and applied with `kubectl apply`, rather than being a separate Helm release. It therefore inherits
+  the app's image, `env`, `envFrom`, `resources` and ServiceAccount from the same values file, and
+  running it never touches the app's own release history
+- `job.nameSuffix` defaults to `<run id>-<attempt>`, so re-running a workflow never collides with the
+  immutable Job it created last time
+- `command`/`args` are newline-separated argv entries passed via `--set-json`; `--set` would split on
+  commas and mangle any argument containing them
+- The wait loop polls Job status instead of `kubectl wait --for=condition=complete`: a single `wait`
+  cannot short-circuit on failure, so a failed Job would block for the whole timeout before the logs
+  appear
+- Logs and, on failure, a `kubectl describe` are always printed — a Job's real error is in the pod,
+  not in the Job object
+- `trigger-cronjob` accepts either the bare `cronJobs[].name` from the values file or a full resource
+  name, resolving `<release>-<name>` when the bare name doesn't exist
 
 ### Helm Chart: charts/app
 
@@ -378,6 +423,10 @@ hand-writing `Deployment`/`Service`/`Ingress` manifests per project.
 - `strategy.mode`: `rolling` (default), `canary`, or `blueGreen` — opt-in; rolling preserves prior
   resource names/selectors
 - `Deployment`, `Service`, and an optional `Ingress` (or Traefik `IngressRoute` when canary+traefik)
+- Batch workloads share the app's values: `job` (one-off, driven by `k8s-job.yml`), `migrations`
+  (the same Job as a Helm `pre-install,pre-upgrade` hook) and `cronJobs` (a list, deployed with the
+  app). All default off/empty. Job pods use a suffixed `app.kubernetes.io/instance` so the app
+  Service can never select them
 - `affinity`, `tolerations`, `nodeSelector`, `env`, `envFrom`, `resources`, `livenessProbe` and
   `readinessProbe` are raw pass-through blocks (`toYaml` straight from `values.yaml`) — the chart
   doesn't need new features for project-specific quirks (e.g. node affinity rules to avoid scheduling
@@ -387,7 +436,7 @@ hand-writing `Deployment`/`Service`/`Ingress` manifests per project.
 ## Self-hosted runner prerequisites
 
 `docker-build-push.yml` (with a local registry) and the k8s deploy workflows (`k8s-deploy.yml`,
-`k8s-canary.yml`, `k8s-bluegreen.yml`) are designed to run on a
+`k8s-canary.yml`, `k8s-bluegreen.yml`, `k8s-job.yml`) are designed to run on a
 **self-hosted** runner with network access to the target registry/cluster — this is not obvious from
 the workflow YAML alone. The runner machine must have:
 
@@ -400,6 +449,8 @@ the workflow YAML alone. The runner machine must have:
   version avoids the extra download on every run
 - **Node/pnpm/corepack** available if `node.yml` also runs on that runner
 - **python3** on the runner for canary/bluegreen release-value introspection (`helm get values -o json`)
+  and for `k8s-job.yml`'s `command`/`args` JSON encoding — stdlib only, no PyYAML
+- **curl** on the runner if `k8s-bluegreen.yml`'s `verify-url` health gate is used
 
 `REGISTRY_HOST` and `KUBE_CONTEXT` are the recommended repo/org-level GitHub Variables for consumers
 to standardize on (see `navi-admin`'s `cd.yml` for the pattern), referenced as

@@ -71,6 +71,7 @@ run_deploy() {
     NAMESPACE=service \
     VALUES_FILE=charts/app/values.yaml \
     IMAGE="${image}" \
+    MIGRATIONS="" \
     HELM_SET="" \
     WAIT=false \
     ATOMIC=false \
@@ -126,6 +127,12 @@ run_bluegreen() {
     ACTIVE_REPLICAS=1 \
     INACTIVE_REPLICAS=1 \
     OVERLAP_SECONDS=0 \
+    PREVIEW=false \
+    VERIFY_URL="" \
+    VERIFY_EXPECT_STATUS=200 \
+    VERIFY_TIMEOUT_SECONDS=10 \
+    VERIFY_INTERVAL_SECONDS=1 \
+    AUTO_ABORT=false \
     HELM_SET="" \
     WAIT=false \
     ATOMIC=false \

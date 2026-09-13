@@ -1,6 +1,6 @@
 {{- $mode := include "app.strategyMode" . -}}
-{{- /* PDB selects stable/rolling pods; skip for blueGreen (slot selectors differ). */ -}}
-{{- if and .Values.podDisruptionBudget.enabled (or (eq $mode "rolling") (eq $mode "canary")) -}}
+{{- /* PDB selects stable/rolling pods, or the ACTIVE blue/green slot. */ -}}
+{{- if .Values.podDisruptionBudget.enabled -}}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -15,5 +15,9 @@ spec:
   {{- end }}
   selector:
     matchLabels:
+      {{- if eq $mode "blueGreen" }}
+      {{- include "app.slot.selectorLabels" (dict "root" . "slot" .Values.blueGreen.activeSlot) | nindent 6 }}
+      {{- else }}
       {{- include "app.selectorLabels" . | nindent 6 }}
+      {{- end }}
 {{- end }}

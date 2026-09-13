@@ -61,6 +61,15 @@ on:
           References without a tag use latest.
         required: true
         type: string
+      migrations:
+        description: >-
+          Override the chart's migrations.enabled: 'true' runs the migration Job as a Helm
+          pre-install/pre-upgrade hook (the upgrade blocks on it and aborts the release if it
+          fails), 'false' skips it. Empty (the default) leaves whatever the values file sets,
+          so existing callers are unaffected. The Job inherits the image being deployed.
+        required: false
+        type: string
+        default: ''
       helm-set:
         description: 'Additional --set overrides, one KEY=VALUE per line'
         required: false
@@ -178,6 +187,7 @@ jobs:
           NAMESPACE: ${{ inputs.namespace }}
           VALUES_FILE: ${{ inputs.values-file }}
           IMAGE: ${{ inputs.image }}
+          MIGRATIONS: ${{ inputs.migrations }}
           HELM_SET: ${{ inputs.helm-set }}
           WAIT: ${{ inputs.wait }}
           ATOMIC: ${{ inputs.atomic }}
@@ -206,6 +216,15 @@ jobs:
             --set "image.repository=${IMAGE_REPO}"
             --set "image.tag=${IMAGE_TAG}"
           )
+
+          case "${MIGRATIONS}" in
+            "") ;;
+            true|false) RENDER_ARGS+=(--set "migrations.enabled=${MIGRATIONS}") ;;
+            *)
+              echo "::error::migrations must be 'true', 'false' or empty (got '${MIGRATIONS}')"
+              exit 1
+              ;;
+          esac
 
           while IFS= read -r kv; do
             [ -z "$kv" ] && continue

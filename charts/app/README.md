@@ -25,7 +25,7 @@ selection and image parsing for you.
 | --- | --- | --- |
 | `rolling` (default) | `k8s-deploy.yml` | Single Deployment/Service/Ingress — unchanged from earlier chart versions |
 | `canary` | `k8s-canary.yml` | Stable Deployment + canary Deployment/Service; promote/abort via workflow `action` |
-| `blueGreen` | `k8s-bluegreen.yml` | `-blue` / `-green` Deployments; Service selects `blueGreen.activeSlot` |
+| `blueGreen` | `k8s-bluegreen.yml` | `-blue` / `-green` Deployments; Service selects `blueGreen.activeSlot`, optional preview Service/Ingress on the inactive slot |
 
 **Do not flip `strategy.mode` on an existing release without a migration plan** — blue/green and
 canary introduce new Deployments and (for blue/green) change the Service selector. Prefer enabling
@@ -44,7 +44,7 @@ the mode on a new release name, or delete the old Deployment/Service first (same
   the canary (0–100).
 - Pods get `DEPLOYMENT_TRACK=canary` on the canary container.
 
-### Blue/green (Kafka workers)
+### Blue/green (Kafka workers and HTTP APIs)
 
 - Two Deployments: `<fullname>-blue` and `<fullname>-green`, labeled with `app.kubernetes.io/slot`.
 - The Service selects only `blueGreen.activeSlot`.
@@ -53,6 +53,31 @@ the mode on a new release name, or delete the old Deployment/Service first (same
   `overlapSeconds: 0` (scale up new → cut over → scale down old) unless handlers are idempotent
   under overlapping consumers.
 - Disable Ingress for workers (`ingress.enabled: false`). Override probes to TCP/exec as needed.
+- For HTTP apps `ingress.enabled: true` now renders the Ingress in this mode too; it points at the
+  main Service, so `promote` flips traffic with no Ingress change. Chart versions before 0.4.0
+  rendered nothing for that combination.
+- `blueGreen.preview.enabled: true` adds `<fullname>-preview`, a Service selecting the **inactive**
+  slot, plus an optional Ingress on `preview.<ingress.host>` — the URL `k8s-bluegreen.yml`'s
+  `verify-url` health gate is meant to poll before you promote.
+- `autoscaling` and `podDisruptionBudget` now apply to the **active slot** in this mode (before
+  0.4.0 they were skipped entirely). Under an HPA the active slot's Deployment omits `replicas`
+  so Helm and the autoscaler don't fight; the inactive slot keeps its explicit count.
+
+### Jobs, migrations and CronJobs
+
+Batch workloads reuse the same values as the app — image, `env`, `envFrom`, `resources`,
+`imagePullSecrets`, ServiceAccount and the scheduling blocks — and every field is overridable per
+job. Job pods carry a suffixed `app.kubernetes.io/instance` so the app Service can never select
+them.
+
+- `job.*` — a single on-demand Job, default off. `k8s-job.yml` turns it on for one run via
+  `--set` and appends `job.nameSuffix` (the run id) so repeat runs never collide.
+- `migrations.*` — the same Job wired as a Helm `pre-install,pre-upgrade` hook, default off.
+  `helm upgrade` waits for it and aborts the release if it fails. `k8s-deploy.yml`'s `migrations`
+  input toggles it per deploy.
+- `cronJobs` — a list of CronJobs deployed together with the app. `name` and `schedule` are
+  required; set `enabled: false` on an entry to render nothing for it. `k8s-job.yml` can trigger,
+  suspend and resume them.
 
 ## Values
 
@@ -94,18 +119,46 @@ the mode on a new release name, or delete the old Deployment/Service first (same
 | `blueGreen.overlapSeconds` | `0` | Documented for promote overlap; workflows drive the cutover |
 | `blueGreen.blue` / `green` `.replicas` | `1` / `0` | Per-slot replica counts |
 | `blueGreen.blue` / `green` `.image` | empty | Per-slot image; falls back to top-level `image` |
+| `blueGreen.preview.enabled` | `false` | Render `<fullname>-preview`, a Service selecting the inactive slot |
+| `blueGreen.preview.ingress.enabled` | `false` | Ingress for the preview Service |
+| `blueGreen.preview.ingress.host` | `""` | Defaults to `preview.<ingress.host>` |
+| `blueGreen.preview.ingress.path` / `pathType` / `className` / `annotations` | `/` / `Prefix` / from `ingress` / `{}` | Preview Ingress rule |
 | `serviceAccount.create` | `false` | Create a ServiceAccount and mount it on pods |
 | `serviceAccount.name` | `""` | SA name override (defaults to fullname when create is true) |
 | `serviceAccount.annotations` | `{}` | SA annotations (e.g. workload identity) |
 | `serviceAccount.automountServiceAccountToken` | `true` | Automount the SA token into pods |
-| `autoscaling.enabled` | `false` | Render an HPA (rolling/canary stable only; skipped for blueGreen) |
+| `autoscaling.enabled` | `false` | Render an HPA (rolling/canary stable Deployment, or the active blueGreen slot) |
 | `autoscaling.minReplicas` / `maxReplicas` | `1` / `3` | HPA replica bounds |
 | `autoscaling.targetCPUUtilizationPercentage` | `80` | CPU target; set `targetMemoryUtilizationPercentage` for memory |
-| `podDisruptionBudget.enabled` | `false` | Render a PodDisruptionBudget (rolling/canary only) |
+| `podDisruptionBudget.enabled` | `false` | Render a PodDisruptionBudget (rolling/canary pods, or the active blueGreen slot) |
 | `podDisruptionBudget.minAvailable` | `1` | Min available pods (preferred over `maxUnavailable` if both set) |
 | `networkPolicy.enabled` | `false` | Render a NetworkPolicy selecting the app pods |
 | `networkPolicy.allowSameNamespace` | `true` | Allow ingress from any pod in the same namespace to `service.port` |
 | `networkPolicy.extraIngress` / `egress` | `[]` / `[]` | Extra ingress rules / egress rules (pass-through) |
+| `job.enabled` | `false` | Render the on-demand Job (`k8s-job.yml` sets this per run) |
+| `job.name` | `job` | Name segment of the Job and of its container |
+| `job.nameSuffix` | `""` | Extra suffix so repeat runs get distinct Job names |
+| `job.image.repository` / `tag` / `pullPolicy` | `""` | Falls back to the top-level `image` |
+| `job.command` / `job.args` | `[]` / `[]` | Container entrypoint / arguments |
+| `job.env` / `job.envFrom` | `[]` / `[]` | Appended to the top-level `env` / `envFrom` |
+| `job.resources` | `{}` | Falls back to the top-level `resources` |
+| `job.restartPolicy` | `Never` | Pod restart policy |
+| `job.backoffLimit` | `0` | Job retries before it is marked failed |
+| `job.ttlSecondsAfterFinished` | `300` | Cluster-side cleanup delay after the Job finishes |
+| `job.activeDeadlineSeconds` / `parallelism` / `completions` | unset | Passed through when set |
+| `job.annotations` / `podAnnotations` / `podLabels` | `{}` | Extra metadata |
+| `migrations.enabled` | `false` | Render the migration Job as a Helm hook |
+| `migrations.*` | same as `job.*` | Same shape as `job` (minus `nameSuffix` semantics) |
+| `migrations.hook` | `pre-install,pre-upgrade` | `helm.sh/hook` value |
+| `migrations.hookWeight` | `"-5"` | `helm.sh/hook-weight` value |
+| `migrations.hookDeletePolicy` | `before-hook-creation` | `helm.sh/hook-delete-policy` value |
+| `cronJobs` | `[]` | List of CronJobs; each entry takes the `job.*` fields plus `schedule` |
+| `cronJobs[].name` / `schedule` | required | Name segment and cron expression |
+| `cronJobs[].enabled` | `true` | Set `false` to render nothing for that entry |
+| `cronJobs[].suspend` | `false` | Create the CronJob suspended |
+| `cronJobs[].concurrencyPolicy` | `Forbid` | `Allow` \| `Forbid` \| `Replace` |
+| `cronJobs[].successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | `3` / `1` | Job history kept |
+| `cronJobs[].timeZone` / `startingDeadlineSeconds` | unset | Passed through when set |
 
 `probes`, `affinity`, `tolerations`, `resources` and `env`/`envFrom` are intentionally raw
 pass-through blocks (`toYaml` straight from `values.yaml`) so project-specific quirks — like
