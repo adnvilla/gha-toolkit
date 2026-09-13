@@ -621,6 +621,13 @@ This repository's own `.releaserc.json` (used by `auto-release.yml`):
 }
 ```
 
+`releaseRules` carries `{ "breaking": true, "release": "major" }` on purpose: `commit-analyzer`
+falls back to its built-in rules only for commits that no custom rule matched, so this list — which
+covers every conventional type — would otherwise shadow the built-in `breaking -> major` rule and
+release `feat!:` / `BREAKING CHANGE:` commits at their type's level. Position within the list is
+irrelevant (the highest matching release type wins); presence is what matters, and
+`tests/release-rules.sh` guards it in CI.
+
 See the actual `.releaserc.json` for the full `releaseRules` and `presetConfig`; `.releaserc.json.example` shows the equivalent config consumers should copy into their own projects.
 
 **Plugin Roles:**

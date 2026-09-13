@@ -248,6 +248,9 @@ jobs:
       - name: Test k8s-job execution
         run: bash tests/k8s-job-run.sh
 
+      - name: Test release rules release breaking changes as major
+        run: bash tests/release-rules.sh
+
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest
