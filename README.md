@@ -365,7 +365,9 @@ Automatic versioning works with commits in this format:
 - `feat!:` or a `BREAKING CHANGE:` footer → major version (1.0.0 → 2.0.0)
 - `chore:`, `test:`, `build:`, `ci:` → no release
 
-See the `commit-analyzer` `releaseRules` in `.releaserc.json` for the authoritative mapping.
+See the `commit-analyzer` `releaseRules` in `.releaserc.json` for the authoritative mapping. Keep
+`{ "breaking": true, "release": "major" }` first in that list — `commit-analyzer` stops at the first
+matching rule, so a `type` rule above it would release breaking changes as a minor.
 
 ## 🚀 Getting Started
 
