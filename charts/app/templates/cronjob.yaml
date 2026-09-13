@@ -7,7 +7,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "app.job.fullname" (dict "root" $ "name" $name) }}
+  name: {{ include "app.cronjob.fullname" (dict "root" $ "name" $name) }}
   labels:
     {{- include "app.labels" $ | nindent 4 }}
     app.kubernetes.io/component: cronjob
@@ -22,10 +22,12 @@ spec:
   {{- end }}
   suspend: {{ $cron.suspend | default false }}
   concurrencyPolicy: {{ $cron.concurrencyPolicy | default "Forbid" }}
-  successfulJobsHistoryLimit: {{ $cron.successfulJobsHistoryLimit | default 3 }}
-  failedJobsHistoryLimit: {{ $cron.failedJobsHistoryLimit | default 1 }}
-  {{- with $cron.startingDeadlineSeconds }}
-  startingDeadlineSeconds: {{ . }}
+  {{- /* hasKey, not `default`: a limit of 0 ("keep no finished Jobs") is valid and `default`
+         would silently replace it. */}}
+  successfulJobsHistoryLimit: {{ if hasKey $cron "successfulJobsHistoryLimit" }}{{ $cron.successfulJobsHistoryLimit }}{{ else }}3{{ end }}
+  failedJobsHistoryLimit: {{ if hasKey $cron "failedJobsHistoryLimit" }}{{ $cron.failedJobsHistoryLimit }}{{ else }}1{{ end }}
+  {{- if hasKey $cron "startingDeadlineSeconds" }}
+  startingDeadlineSeconds: {{ $cron.startingDeadlineSeconds }}
   {{- end }}
   jobTemplate:
     metadata:
@@ -37,10 +39,11 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "app.job.podLabels" (dict "root" $ "name" $name) | nindent 12 }}
-            {{- with $cron.podLabels }}
+            {{- /* Reserved selector keys are stripped from the user map — see job.yaml. */}}
+            {{- with omit ($cron.podLabels | default dict) "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" "app.kubernetes.io/managed-by" }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+            {{- include "app.job.podLabels" (dict "root" $ "name" $name) | nindent 12 }}
           {{- with $cron.podAnnotations }}
           annotations:
             {{- toYaml . | nindent 12 }}

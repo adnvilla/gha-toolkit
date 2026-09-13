@@ -182,6 +182,44 @@ jobs:
             --set cronJobs[1].schedule='@daily' \
             --set cronJobs[1].enabled=false \
             --show-only templates/cronjob.yaml > /dev/null
+          # Reserved selector labels must survive a hostile podLabels override, a CronJob name
+          # must stay within the Kubernetes 52-character cap, and a history limit of 0 must not
+          # be swallowed by Helm's `default`.
+          rendered="$(helm template a-very-long-release-name-for-testing charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=test \
+            --set job.enabled=true \
+            --set job.name=migrate \
+            --set 'job.podLabels.app\.kubernetes\.io/instance=hijacked' \
+            --show-only templates/job.yaml)"
+          if grep -q 'instance: hijacked' <<< "${rendered}"; then
+            echo "::error::job.podLabels overrode a reserved selector label"
+            exit 1
+          fi
+          rendered="$(helm template a-very-long-release-name-for-testing charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=test \
+            --set cronJobs[0].name=a-rather-long-cronjob-entry-name \
+            --set cronJobs[0].schedule='@daily' \
+            --set cronJobs[0].successfulJobsHistoryLimit=0 \
+            --show-only templates/cronjob.yaml)"
+          name="$(awk '/^  name:/ { print $2; exit }' <<< "${rendered}")"
+          if [ "${#name}" -gt 52 ]; then
+            echo "::error::rendered CronJob name '${name}' is ${#name} chars, over the 52 limit"
+            exit 1
+          fi
+          if ! grep -q 'successfulJobsHistoryLimit: 0' <<< "${rendered}"; then
+            echo "::error::successfulJobsHistoryLimit=0 was replaced by the default"
+            exit 1
+          fi
+          # The migration hook must not reference a ServiceAccount that pre-install has not
+          # created yet: it gets its own, at a lower hook weight.
+          helm template test-release charts/app \
+            --set image.repository=registry.example.local:5000/test-app \
+            --set image.tag=test \
+            --set migrations.enabled=true \
+            --set serviceAccount.create=true \
+            --show-only templates/serviceaccount-migrations.yaml > /dev/null
 
   validate-shell-logic:
     name: Validate Workflow Shell Logic

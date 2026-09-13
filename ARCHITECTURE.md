@@ -411,8 +411,13 @@ Actions: `run`, `trigger-cronjob`, `suspend-cronjob`, `resume-cronjob`.
   appear
 - Logs and, on failure, a `kubectl describe` are always printed — a Job's real error is in the pod,
   not in the Job object
-- `trigger-cronjob` accepts either the bare `cronJobs[].name` from the values file or a full resource
-  name, resolving `<release>-<name>` when the bare name doesn't exist
+- The CronJob actions accept either the bare `cronJobs[].name` from the values file or a full
+  resource name. A bare name is resolved by listing the release's CronJobs by label
+  (`app.kubernetes.io/instance` + `component=cronjob`) and matching the suffix — never by
+  concatenating `<release>-<name>`, which is wrong as soon as the chart fullname differs from the
+  release name. Zero or multiple matches are an error, not a guess
+- Triggered Job names truncate the CronJob portion, never the `<run id>-<attempt>` suffix, so a
+  re-run can't collide with the Job the previous attempt created
 
 ### Helm Chart: charts/app
 
@@ -425,8 +430,12 @@ hand-writing `Deployment`/`Service`/`Ingress` manifests per project.
 - `Deployment`, `Service`, and an optional `Ingress` (or Traefik `IngressRoute` when canary+traefik)
 - Batch workloads share the app's values: `job` (one-off, driven by `k8s-job.yml`), `migrations`
   (the same Job as a Helm `pre-install,pre-upgrade` hook) and `cronJobs` (a list, deployed with the
-  app). All default off/empty. Job pods use a suffixed `app.kubernetes.io/instance` so the app
-  Service can never select them
+  app). All default off/empty. Job pods use a suffixed `app.kubernetes.io/instance`, and reserved
+  `app.kubernetes.io/*` keys are stripped from user `podLabels`, so the app Service can never
+  select them
+- With `serviceAccount.create`, the migration hook gets its own `<fullname>-migrations` SA at a
+  lower hook weight: Helm runs `pre-install` hooks before the chart's ordinary resources, so the
+  app's own ServiceAccount does not exist yet on a first install
 - `affinity`, `tolerations`, `nodeSelector`, `env`, `envFrom`, `resources`, `livenessProbe` and
   `readinessProbe` are raw pass-through blocks (`toYaml` straight from `values.yaml`) — the chart
   doesn't need new features for project-specific quirks (e.g. node affinity rules to avoid scheduling

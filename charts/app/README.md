@@ -79,6 +79,22 @@ them.
   required; set `enabled: false` on an entry to render nothing for it. `k8s-job.yml` can trigger,
   suspend and resume them.
 
+Details worth knowing:
+
+- **ServiceAccount on a first install.** Helm runs `pre-install` hooks *before* the chart's ordinary
+  resources, so the migration Job cannot use the ServiceAccount from `serviceaccount.yaml` — it does
+  not exist yet. With `serviceAccount.create: true` the chart therefore renders a dedicated
+  `<fullname>-migrations` SA (same annotations, hook weight `-10`, i.e. before the Job at `-5`).
+  Point `migrations.serviceAccountName` at an existing SA to skip it.
+- **Reserved labels.** `podLabels` entries named `app.kubernetes.io/name`, `instance`, `component`
+  or `managed-by` are dropped: keeping them would let a Job pod match the app Service and take
+  production traffic.
+- **CronJob names cap at 52 characters**, not 63 — Kubernetes appends an 11-character suffix to
+  build each Job name — so `<fullname>-<entry name>` is truncated to 52.
+- **Explicit zeros are honoured.** `backoffLimit`, `ttlSecondsAfterFinished`,
+  `successfulJobsHistoryLimit` and `failedJobsHistoryLimit` are read with `hasKey`, so a value of
+  `0` is not silently replaced by the default (Helm's `default` treats `0` as empty).
+
 ## Values
 
 | Key | Default | Description |
@@ -146,12 +162,15 @@ them.
 | `job.backoffLimit` | `0` | Job retries before it is marked failed |
 | `job.ttlSecondsAfterFinished` | `300` | Cluster-side cleanup delay after the Job finishes |
 | `job.activeDeadlineSeconds` / `parallelism` / `completions` | unset | Passed through when set |
-| `job.annotations` / `podAnnotations` / `podLabels` | `{}` | Extra metadata |
+| `job.serviceAccountName` | `""` | Override the SA for this Job; empty inherits `serviceAccount` resolution |
+| `job.annotations` / `podAnnotations` / `podLabels` | `{}` | Extra metadata; reserved `app.kubernetes.io/*` selector keys are stripped from `podLabels` |
 | `migrations.enabled` | `false` | Render the migration Job as a Helm hook |
 | `migrations.*` | same as `job.*` | Same shape as `job` (minus `nameSuffix` semantics) |
 | `migrations.hook` | `pre-install,pre-upgrade` | `helm.sh/hook` value |
 | `migrations.hookWeight` | `"-5"` | `helm.sh/hook-weight` value |
 | `migrations.hookDeletePolicy` | `before-hook-creation` | `helm.sh/hook-delete-policy` value |
+| `migrations.serviceAccountName` | `""` | Reuse an existing SA instead of the dedicated hook SA |
+| `migrations.serviceAccountHookWeight` | `"-10"` | Hook weight of the dedicated migration SA (must sort before `hookWeight`) |
 | `cronJobs` | `[]` | List of CronJobs; each entry takes the `job.*` fields plus `schedule` |
 | `cronJobs[].name` / `schedule` | required | Name segment and cron expression |
 | `cronJobs[].enabled` | `true` | Set `false` to render nothing for that entry |

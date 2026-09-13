@@ -342,11 +342,23 @@ Before considering a change complete:
   `# shellcheck disable=SC2086`. SC2086 stays enabled everywhere else on purpose.
 - **Don't give Job/CronJob pods the app's full selector labels.** The app `Service` selects on
   `app.kubernetes.io/name` + `instance`; a Job pod carrying both would join the Service endpoints and
-  take production traffic. `app.job.podLabels` suffixes the instance label for exactly this reason —
-  keep it that way when adding batch templates.
+  take production traffic. `app.job.podLabels` suffixes the instance label for exactly this reason,
+  and every batch template runs user `podLabels` through `omit` for the reserved
+  `app.kubernetes.io/*` keys — stripping them, not merely emitting them first, since a duplicate YAML
+  key would leave the outcome to the decoder. Keep both when adding batch templates.
+- **Don't guess a chart-rendered resource name in a workflow.** `app.fullname` is
+  `<release>-<chart name>` and moves with `nameOverride`/`fullnameOverride`, so
+  `"${RELEASE_NAME}-${NAME}"` is wrong for a normal release. `k8s-job.yml` resolves a bare
+  `cronjob-name` by listing `app.kubernetes.io/instance=<release>,app.kubernetes.io/component=cronjob`
+  and matching the suffix, erroring on zero or multiple hits.
+- **Don't use Helm's `default` for a numeric chart value where `0` is meaningful.** `default` treats
+  `0` as empty, so `backoffLimit: 0` or `successfulJobsHistoryLimit: 0` would silently become the
+  fallback. The batch templates use `hasKey` instead.
 - **Don't switch `k8s-job.yml`'s wait loop to `kubectl wait --for=condition=complete`.** A single
   `wait` can't short-circuit on failure, so a failed Job blocks for the whole `timeout-seconds`
-  before anyone sees the logs. The poll loop checks `succeeded` and `failed` on every tick.
+  before anyone sees the logs. The poll loop reads the Job's *terminal conditions* — never
+  `.status.failed`, which counts failed pods and is non-zero while a Job with `backoffLimit > 0` is
+  still retrying.
 - **Don't make `k8s-deploy.yml`'s `migrations` input a boolean.** It's a tri-state string
   (`''` | `'true'` | `'false'`) so the default can mean "respect the values file"; a boolean default
   of `false` would silently disable migrations for anyone who enabled them in their chart values.

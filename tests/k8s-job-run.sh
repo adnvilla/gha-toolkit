@@ -93,13 +93,21 @@ case "$1" in
   get)
     case "$2" in
       job)
-        case "$*" in
-          *succeeded*) [ "${FAKE_JOB_RESULT}" == "succeeded" ] && echo "1" ;;
-          *failed*) [ "${FAKE_JOB_RESULT}" == "failed" ] && echo "1" ;;
+        # The step reads the Job's terminal conditions. "retrying" mimics a Job with
+        # backoffLimit > 0 whose pods have failed but which the controller is still retrying:
+        # failed pods, no terminal condition yet.
+        case "${FAKE_JOB_RESULT}" in
+          succeeded) printf 'Complete ' ;;
+          failed) printf 'Failed ' ;;
         esac
         ;;
       cronjob)
-        [ "$3" == "${FAKE_CRONJOB}" ] || exit 1
+        # "get cronjob -n ns -l ... -o jsonpath" lists the release's CronJobs; anything else is
+        # an existence check for one exact name.
+        case "$3" in
+          -*) printf '%s\n' "${FAKE_RELEASE_CRONJOBS}" ;;
+          *) [ "$3" == "${FAKE_CRONJOB}" ] || exit 1 ;;
+        esac
         ;;
     esac
     ;;
@@ -202,6 +210,7 @@ run_cronjob() {
     PATH="${STUB_DIR}:${PATH}" \
     KUBECTL_CALLS_FILE="${KUBECTL_CALLS_FILE}" \
     FAKE_CRONJOB="${FAKE_CRONJOB}" \
+    FAKE_RELEASE_CRONJOBS="${FAKE_RELEASE_CRONJOBS}" \
     GITHUB_OUTPUT="${STEP_OUTPUT}" \
     GITHUB_RUN_ID=42 \
     GITHUB_RUN_ATTEMPT=1 \
@@ -209,7 +218,7 @@ run_cronjob() {
     RELEASE_NAME=service \
     NAMESPACE=service \
     CRONJOB_NAME="${CRONJOB_NAME}" \
-    NAME_SUFFIX="" \
+    NAME_SUFFIX="${NAME_SUFFIX}" \
     bash "${CRONJOB_SCRIPT}" > "${STEP_LOG}" 2>&1
   STEP_STATUS=$?
   set -e
@@ -226,7 +235,11 @@ reset_env() {
   DELETE_ON_SUCCESS=false
   ACTION=""
   CRONJOB_NAME=""
-  FAKE_CRONJOB="service-cleanup"
+  # No exact-name match by default: the chart renders <fullname>-<name>, so a bare name has to be
+  # discovered through the release's labels.
+  FAKE_CRONJOB=""
+  FAKE_RELEASE_CRONJOBS="service-app-cleanup
+service-app-nightly-report"
 }
 
 expect_success() {
@@ -356,6 +369,14 @@ expect_kubectl_call "describe job service-app-migrate-42-1"
 end_case
 
 reset_env
+begin_case "failed pods under a retry budget are not treated as a terminal failure"
+FAKE_JOB_RESULT=retrying
+run_wait
+expect_failure
+expect_step_output "status=timeout"
+end_case
+
+reset_env
 begin_case "a Job that never finishes fails on the timeout"
 FAKE_JOB_RESULT=pending
 run_wait
@@ -364,24 +385,48 @@ expect_step_output "status=timeout"
 end_case
 
 reset_env
-begin_case "trigger-cronjob resolves a bare name segment against the release"
+begin_case "trigger-cronjob discovers the chart-rendered name from a bare name segment"
 ACTION=trigger-cronjob
 CRONJOB_NAME=cleanup
-FAKE_CRONJOB="service-cleanup"
 run_cronjob
 expect_success
-expect_kubectl_call "create job service-cleanup-42-1 --from=cronjob/service-cleanup"
-expect_step_output "job-name=service-cleanup-42-1"
+expect_kubectl_call "create job service-app-cleanup-42-1 --from=cronjob/service-app-cleanup"
+expect_step_output "job-name=service-app-cleanup-42-1"
+end_case
+
+reset_env
+begin_case "a bare name is not assumed to be <release>-<name>"
+ACTION=trigger-cronjob
+CRONJOB_NAME=cleanup
+run_cronjob
+expect_success
+expect_no_kubectl_call "--from=cronjob/service-cleanup"
 end_case
 
 reset_env
 begin_case "trigger-cronjob accepts a full resource name"
 ACTION=trigger-cronjob
-CRONJOB_NAME=nightly-report
-FAKE_CRONJOB="nightly-report"
+CRONJOB_NAME=my-own-report
+FAKE_CRONJOB="my-own-report"
 run_cronjob
 expect_success
-expect_kubectl_call "--from=cronjob/nightly-report"
+expect_kubectl_call "--from=cronjob/my-own-report"
+end_case
+
+reset_env
+begin_case "the uniqueness suffix survives a CronJob name at the length limit"
+ACTION=trigger-cronjob
+CRONJOB_NAME="$(printf 'c%.0s' $(seq 1 52))"
+FAKE_CRONJOB="${CRONJOB_NAME}"
+NAME_SUFFIX="rerun-20260913-1200"
+run_cronjob
+expect_success
+CREATED_JOB="$(sed -n 's/^job-name=//p' "${STEP_OUTPUT}")"
+case "${CREATED_JOB}" in
+  *-"${NAME_SUFFIX}") ;;
+  *) fail "created Job '${CREATED_JOB}' lost the uniqueness suffix" ;;
+esac
+[ "${#CREATED_JOB}" -le 63 ] || fail "created Job name is ${#CREATED_JOB} chars, over the 63 limit"
 end_case
 
 reset_env
@@ -391,6 +436,7 @@ CRONJOB_NAME=cleanup
 run_cronjob
 expect_success
 expect_kubectl_call '{"spec":{"suspend":true}}'
+expect_kubectl_call "patch cronjob service-app-cleanup"
 expect_step_output "status=patched"
 end_case
 
@@ -409,6 +455,17 @@ ACTION=suspend-cronjob
 CRONJOB_NAME=missing
 run_cronjob
 expect_failure
+end_case
+
+reset_env
+begin_case "an ambiguous bare name fails instead of picking one at random"
+ACTION=suspend-cronjob
+CRONJOB_NAME=cleanup
+FAKE_RELEASE_CRONJOBS="service-app-cleanup
+service-app-extra-cleanup"
+run_cronjob
+expect_failure
+expect_no_kubectl_call "patch cronjob"
 end_case
 
 if [ "${FAILURES}" -ne 0 ]; then

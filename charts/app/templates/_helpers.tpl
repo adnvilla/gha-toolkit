@@ -162,7 +162,9 @@ restartPolicy: {{ $job.restartPolicy | default "Never" }}
 imagePullSecrets:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- if or $root.Values.serviceAccount.create $root.Values.serviceAccount.name }}
+{{- if $job.serviceAccountName }}
+serviceAccountName: {{ $job.serviceAccountName }}
+{{- else if or $root.Values.serviceAccount.create $root.Values.serviceAccount.name }}
 serviceAccountName: {{ include "app.serviceAccountName" $root }}
 {{- end }}
 {{- with $affinity }}
@@ -209,17 +211,19 @@ Usage: include "app.job.spec" (dict "job" $jobValues) | nindent <n>
 */}}
 {{- define "app.job.spec" -}}
 {{- $job := .job -}}
-backoffLimit: {{ $job.backoffLimit | default 0 }}
-{{- if $job.ttlSecondsAfterFinished }}
+{{- /* hasKey, not `default`: Helm's `default` treats a numeric 0 as empty, which would
+       silently turn `backoffLimit: 0` or `ttlSecondsAfterFinished: 0` into the fallback. */ -}}
+backoffLimit: {{ if hasKey $job "backoffLimit" }}{{ $job.backoffLimit }}{{ else }}0{{ end }}
+{{- if hasKey $job "ttlSecondsAfterFinished" }}
 ttlSecondsAfterFinished: {{ $job.ttlSecondsAfterFinished }}
 {{- end }}
-{{- if $job.activeDeadlineSeconds }}
+{{- if hasKey $job "activeDeadlineSeconds" }}
 activeDeadlineSeconds: {{ $job.activeDeadlineSeconds }}
 {{- end }}
-{{- if $job.parallelism }}
+{{- if hasKey $job "parallelism" }}
 parallelism: {{ $job.parallelism }}
 {{- end }}
-{{- if $job.completions }}
+{{- if hasKey $job "completions" }}
 completions: {{ $job.completions }}
 {{- end }}
 {{- end -}}
@@ -234,4 +238,29 @@ app.kubernetes.io/name: {{ include "app.name" .root }}
 app.kubernetes.io/instance: {{ printf "%s-%s" .root.Release.Name (.name | default "job") | trunc 63 | trimSuffix "-" }}
 app.kubernetes.io/component: job
 app.kubernetes.io/managed-by: {{ .root.Release.Service }}
+{{- end -}}
+
+{{/*
+CronJob resource name. Kubernetes caps CronJob names at 52 characters (not 63): the controller
+appends an 11-character suffix to build each Job name.
+Usage: include "app.cronjob.fullname" (dict "root" . "name" "cleanup")
+*/}}
+{{- define "app.cronjob.fullname" -}}
+{{- printf "%s-%s" (include "app.fullname" .root) .name | trunc 52 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+ServiceAccount used by the migration hook. Helm runs pre-install hooks before the chart's ordinary
+resources exist, so the migration Job cannot reference the chart's own ServiceAccount on a first
+install. When serviceAccount.create is on, a dedicated SA with the same annotations is rendered as
+an earlier hook instead; see charts/app/templates/serviceaccount-migrations.yaml.
+*/}}
+{{- define "app.migrations.serviceAccountName" -}}
+{{- if .Values.migrations.serviceAccountName -}}
+{{- .Values.migrations.serviceAccountName -}}
+{{- else if .Values.serviceAccount.create -}}
+{{- printf "%s-migrations" (include "app.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- .Values.serviceAccount.name -}}
+{{- end -}}
 {{- end -}}

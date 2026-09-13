@@ -348,12 +348,31 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Accept the chart's bare name segment ("cleanup") or the full resource name.
-          CRONJOB="${CRONJOB_NAME}"
-          if ! kubectl get cronjob "${CRONJOB}" -n "${NAMESPACE}" >/dev/null 2>&1; then
-            CRONJOB="${RELEASE_NAME}-${CRONJOB_NAME}"
+          # Accept the chart's bare name segment ("cleanup") or the full resource name. The
+          # rendered name is <chart fullname>-<name>, and the fullname moves with
+          # nameOverride/fullnameOverride, so a bare name is discovered by label instead of being
+          # guessed as "<release>-<name>".
+          if kubectl get cronjob "${CRONJOB_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+            CRONJOB="${CRONJOB_NAME}"
+          else
+            RELEASE_CRONJOBS="$(kubectl get cronjob -n "${NAMESPACE}" \
+              -l "app.kubernetes.io/instance=${RELEASE_NAME},app.kubernetes.io/component=cronjob" \
+              -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+            MATCHES="$(printf '%s\n' "${RELEASE_CRONJOBS}" | grep -E -- "(^|-)${CRONJOB_NAME}\$" || true)"
+            MATCH_COUNT="$(printf '%s' "${MATCHES}" | grep -c . || true)"
+            if [ "${MATCH_COUNT}" -eq 1 ]; then
+              CRONJOB="${MATCHES}"
+            elif [ "${MATCH_COUNT}" -eq 0 ]; then
+              echo "::error::no CronJob named '${CRONJOB_NAME}' in ${NAMESPACE} for release" \
+                "${RELEASE_NAME}. CronJobs in this release: ${RELEASE_CRONJOBS:-<none>}"
+              exit 1
+            else
+              echo "::error::'${CRONJOB_NAME}' matches several CronJobs (${MATCHES//$'\n'/, });" \
+                "pass the full resource name"
+              exit 1
+            fi
           fi
-          kubectl get cronjob "${CRONJOB}" -n "${NAMESPACE}" >/dev/null
+          echo "Resolved CronJob: ${CRONJOB}"
 
           case "${ACTION}" in
             trigger-cronjob)
@@ -361,7 +380,10 @@ jobs:
               if [ -z "${SUFFIX}" ]; then
                 SUFFIX="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
               fi
-              JOB="$(printf '%s-%s' "${CRONJOB}" "${SUFFIX}" | cut -c1-63)"
+              # Truncate the CronJob part, never the suffix: Job names cap at 63 characters and a
+              # clipped suffix would collide with the previous attempt's Job.
+              JOB_BASE="$(printf '%s' "${CRONJOB}" | cut -c1-"$((62 - ${#SUFFIX}))")"
+              JOB="${JOB_BASE%-}-${SUFFIX}"
               kubectl create job "${JOB}" --from="cronjob/${CRONJOB}" -n "${NAMESPACE}"
               echo "job-name=${JOB}" >> "${GITHUB_OUTPUT}"
               ;;
@@ -391,21 +413,24 @@ jobs:
 
           # Poll instead of `kubectl wait --for=condition=complete`: a single wait cannot
           # short-circuit on failure, so a failed Job would block for the whole timeout.
+          # Terminal conditions only — `.status.failed` counts failed pods, so with
+          # backoffLimit > 0 it is non-zero while the controller is still retrying.
           DEADLINE=$((SECONDS + TIMEOUT_SECONDS))
           STATUS="timeout"
           while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
-            SUCCEEDED="$(kubectl get job "${JOB_NAME}" -n "${NAMESPACE}" \
-              -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "")"
-            FAILED="$(kubectl get job "${JOB_NAME}" -n "${NAMESPACE}" \
-              -o jsonpath='{.status.failed}' 2>/dev/null || echo "")"
-            if [ -n "${SUCCEEDED}" ] && [ "${SUCCEEDED}" -gt 0 ]; then
-              STATUS="succeeded"
-              break
-            fi
-            if [ -n "${FAILED}" ] && [ "${FAILED}" -gt 0 ]; then
-              STATUS="failed"
-              break
-            fi
+            CONDITIONS="$(kubectl get job "${JOB_NAME}" -n "${NAMESPACE}" \
+              -o jsonpath='{range .status.conditions[?(@.status=="True")]}{.type}{" "}{end}' \
+              2>/dev/null || echo "")"
+            case " ${CONDITIONS} " in
+              *" Complete "*)
+                STATUS="succeeded"
+                break
+                ;;
+              *" Failed "*)
+                STATUS="failed"
+                break
+                ;;
+            esac
             sleep "${POLL_INTERVAL}"
           done
 

@@ -167,6 +167,8 @@ networkPolicy:
 # (image, env, envFrom, resources, serviceAccount, imagePullSecrets, scheduling blocks).
 job:
   enabled: false
+  # Optional ServiceAccount override; empty inherits the chart's serviceAccount resolution.
+  serviceAccountName: ""
   # Name segment of the Job (…-<name>) and of the container.
   name: job
   # Extra suffix appended by k8s-job.yml so repeat runs never collide.
@@ -213,6 +215,11 @@ migrations:
   hook: pre-install,pre-upgrade
   hookWeight: "-5"
   hookDeletePolicy: before-hook-creation
+  # ServiceAccount for the migration Job. Empty + serviceAccount.create=true renders a dedicated
+  # `<fullname>-migrations` SA as an earlier hook (weight below), because Helm runs pre-install
+  # hooks before the chart's own ServiceAccount exists. Set this to reuse an existing SA instead.
+  serviceAccountName: ""
+  serviceAccountHookWeight: "-10"
   annotations: {}
   podAnnotations: {}
   podLabels: {}
