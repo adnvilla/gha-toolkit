@@ -1,0 +1,36 @@
+{{- /* One-off Job (migration, backfill, seed). Rendered on demand by k8s-job.yml;
+       default off so app deploys never create it. Job pods carry a suffixed instance
+       label so the app Service can never select them. */ -}}
+{{- if .Values.job.enabled -}}
+{{- $job := .Values.job -}}
+{{- $name := $job.name | default "job" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "app.job.fullname" (dict "root" . "name" $name "suffix" $job.nameSuffix) }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: job
+  {{- with $job.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- include "app.job.spec" (dict "job" $job) | nindent 2 }}
+  template:
+    metadata:
+      labels:
+        {{- /* Reserved selector keys are stripped from the user map rather than overridden: a
+               podLabels entry named app.kubernetes.io/instance would otherwise put this pod behind
+               the app Service, and emitting the key twice relies on decoder order. */}}
+        {{- with omit ($job.podLabels | default dict) "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" "app.kubernetes.io/managed-by" }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "app.job.podLabels" (dict "root" . "name" $name) | nindent 8 }}
+      {{- with $job.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "app.job.podSpec" (dict "root" . "job" (merge (dict "name" $name) $job)) | nindent 6 }}
+{{- end }}

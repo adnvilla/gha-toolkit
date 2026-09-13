@@ -589,6 +589,166 @@ Flow: `deploy` starts the new image on the inactive slot while the active slot k
 check lag/errors → `promote` flips `activeSlot` and scales the old slot to 0 → or `abort` scales
 the inactive slot down.
 
+## Example 14: Database Migrations, One-Off Jobs and CronJobs
+
+Three ways to run non-HTTP work with the same chart and values file the app deploys with, so the
+Job always inherits the image, `env`, `envFrom`, `resources` and ServiceAccount.
+
+```yaml
+# k8s/values-local.yaml
+fullnameOverride: my-api
+image:
+  repository: registry.example.local:5000/my-api
+envFrom:
+  - secretRef:
+      name: my-api-secrets
+
+# 1. Migrations as a Helm pre-upgrade hook: `helm upgrade` blocks on this Job and aborts the
+#    release if it fails. Enabled per deploy via the workflow's `migrations` input.
+migrations:
+  command: ["/app/bin/migrate"]
+  args: ["up"]
+  backoffLimit: 0
+
+# 2. Default command for the on-demand Job (k8s-job.yml can override command/args per run).
+job:
+  ttlSecondsAfterFinished: 900
+
+# 3. Scheduled work, deployed together with the app by k8s-deploy.yml.
+cronJobs:
+  - name: cleanup
+    schedule: "0 3 * * *"
+    timeZone: America/Mexico_City
+    command: ["/app/bin/cleanup"]
+    args: ["--older-than=30d"]
+    concurrencyPolicy: Forbid
+  - name: nightly-report
+    schedule: "@daily"
+    command: ["/app/bin/report"]
+    resources:
+      limits:
+        memory: 1Gi
+```
+
+Run the migrations on every deploy:
+
+```yaml
+  deploy:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@master
+    with:
+      release-name: my-api
+      namespace: my-api
+      kube-context: ${{ vars.KUBE_CONTEXT }}
+      values-file: k8s/values-local.yaml
+      image: ${{ needs.build.outputs.image }}
+      migrations: 'true'   # '' (default) respects the values file, 'false' skips it
+      runs-on: self-hosted
+```
+
+Or run a Job by hand — a backfill, a one-time fix, a re-run of a failed migration:
+
+```yaml
+# .github/workflows/job.yml
+name: Run Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        options: [run, trigger-cronjob, suspend-cronjob, resume-cronjob]
+        default: run
+      image:
+        description: 'Image to run (defaults to the values file)'
+        default: ''
+
+jobs:
+  job:
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-job.yml@master
+    with:
+      action: ${{ inputs.action }}
+      environment: production
+      release-name: my-api
+      namespace: my-api
+      kube-context: ${{ vars.KUBE_CONTEXT }}
+      values-file: k8s/values-local.yaml
+      image: ${{ inputs.image }}
+      job-name: backfill
+      command: |
+        /app/bin/backfill
+      args: |
+        --from=2026-01-01
+        --to=2026-02-01
+      cronjob-name: cleanup      # used by the trigger/suspend/resume actions
+      timeout-seconds: 1800
+      runs-on: self-hosted
+```
+
+Notes:
+
+- `command`/`args` take one argv entry per line, so an argument may contain spaces or commas.
+- The Job name is `<release>-app-<job-name>-<run id>-<attempt>`, so re-runs never collide.
+- The workflow fails as soon as the Job reports a failure — it does not wait out the timeout — and
+  prints the pod logs plus a `kubectl describe` either way.
+- `suspend-cronjob` is the safe switch before a risky deploy; `resume-cronjob` puts it back.
+
+## Example 15: HTTP API Blue/Green with a Preview Host
+
+Blue/green is not only for workers. With `preview: true` the chart renders a Service (and, when
+the values file enables it, an Ingress on `preview.<host>`) in front of the **inactive** slot, so
+the new version can be smoke-tested on a real URL before it takes production traffic.
+
+```yaml
+# k8s/values-api.yaml
+fullnameOverride: my-api
+strategy:
+  mode: blueGreen
+ingress:
+  enabled: true
+  className: traefik
+  host: api.example.com
+blueGreen:
+  preview:
+    enabled: true
+    ingress:
+      enabled: true       # host defaults to preview.api.example.com
+```
+
+```yaml
+  deploy:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-bluegreen.yml@master
+    with:
+      action: deploy
+      release-name: my-api
+      namespace: my-api
+      kube-context: ${{ vars.KUBE_CONTEXT }}
+      values-file: k8s/values-api.yaml
+      image: ${{ needs.build.outputs.image }}
+      preview: true
+      verify-url: https://preview.api.example.com/healthz
+      auto-abort: true          # scale the bad slot back to 0 instead of leaving it up
+      runs-on: self-hosted
+
+  promote:
+    needs: deploy
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-bluegreen.yml@master
+    with:
+      action: promote
+      release-name: my-api
+      namespace: my-api
+      kube-context: ${{ vars.KUBE_CONTEXT }}
+      values-file: k8s/values-api.yaml
+      image: ${{ needs.build.outputs.image }}
+      verify-url: https://api.example.com/healthz
+      runs-on: self-hosted
+```
+
+`action: status` returns the current `active-slot` / `inactive-slot` / `image` outputs without
+touching the release — use it when a scheduled or manual workflow needs to decide whether to
+deploy or promote.
+
 ## Important Notes
 
 ### Permissions

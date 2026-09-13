@@ -1,0 +1,31 @@
+{{- /* Optional Ingress for the blue/green preview Service (inactive slot).
+       Host defaults to preview.<ingress.host>. Default off. */ -}}
+{{- if and (eq (include "app.strategyMode" .) "blueGreen") .Values.blueGreen.preview.enabled .Values.blueGreen.preview.ingress.enabled -}}
+{{- $host := include "app.preview.ingressHost" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "app.preview.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: preview
+  {{- with .Values.blueGreen.preview.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with (.Values.blueGreen.preview.ingress.className | default .Values.ingress.className) }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.blueGreen.preview.ingress.path | default "/" }}
+            pathType: {{ .Values.blueGreen.preview.ingress.pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ include "app.preview.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

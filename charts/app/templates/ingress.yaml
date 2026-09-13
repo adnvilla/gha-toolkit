@@ -1,6 +1,8 @@
 {{- $mode := include "app.strategyMode" . -}}
-{{- /* Standard Ingress for rolling / canary(none). Skipped when canary uses Traefik CRDs. */ -}}
-{{- if and .Values.ingress.enabled (ne $mode "blueGreen") -}}
+{{- /* Standard Ingress for rolling / canary(none) / blueGreen. In blueGreen mode the backing
+       Service already selects the active slot, so promote flips traffic with no Ingress change.
+       Skipped when canary uses Traefik CRDs. */ -}}
+{{- if .Values.ingress.enabled -}}
 {{- if not (and (eq $mode "canary") (eq .Values.canary.trafficProvider "traefik")) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress

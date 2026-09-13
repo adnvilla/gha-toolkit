@@ -35,17 +35,22 @@ backward compatibility matters (see [Change classification](#7-change-classifica
   docker-build-push.yml  # Build a Docker image, push to registry (ghcr/dockerhub/local), outputs `image`
   k8s-deploy.yml         # Rolling deploy via Helm using charts/app, bound to a GitHub Environment
   k8s-canary.yml         # Canary phases (deploy/promote/abort) for HTTP APIs
-  k8s-bluegreen.yml      # Blue/green phases for workers (e.g. Kafka consumers)
+  k8s-bluegreen.yml      # Blue/green phases (deploy/promote/abort/status), workers and HTTP APIs
+  k8s-job.yml            # One-off Jobs (migrations/backfills) + CronJob trigger/suspend/resume
   release.yml            # semantic-release runner
   # Internal (govern THIS repo's lifecycle, not reusable):
   ci.yml                 # lint YAML + Actions semantics + Markdown, validate chart, run shell-logic
                          # tests, validate doc pins
   auto-release.yml       # workflow_run after CI success on master -> runs release logic (dogfoods release.yml)
   test.yml               # workflow_dispatch smoke test that calls the reusable workflows locally
-charts/app/              # Generic Helm chart (rolling/canary/blueGreen + optional SA/HPA/PDB/NetworkPolicy)
+charts/app/              # Generic Helm chart (rolling/canary/blueGreen + Job/migrations/CronJobs
+                         # + optional SA/HPA/PDB/NetworkPolicy)
 tests/                   # Shell-logic tests: extract a workflow step's `run:` body and run it stubbed
   canary-image-resolution.sh  # k8s-canary.yml stable/canary image discovery (non-dry-run path)
   k8s-image-references.sh     # k8s workflow image parsing + rendered-reference regressions
+  bluegreen-slot-flip.sh      # k8s-bluegreen.yml slot flip, status, preview and verify/auto-abort
+  k8s-job-run.sh              # k8s-job.yml render/wait/CronJob logic (all non-dry-run)
+  action-node24-versions.sh   # rejects action releases that still embed Node.js 20
 .releaserc.json          # THIS repo's semantic-release config — SOURCE OF TRUTH for release rules
 .releaserc.json.example  # Template consumers copy into their own repo
 .yamllint.yml            # YAML lint rules
@@ -115,10 +120,24 @@ helm template test-release charts/app \
   --set blueGreen.blue.image.repository=registry.example.local:5000/test-app \
   --set blueGreen.blue.image.tag=blue --set blueGreen.green.image.repository=registry.example.local:5000/test-app \
   --set blueGreen.green.image.tag=green --set blueGreen.green.replicas=1 > /dev/null
+# Batch workloads (all default-off, so this is their only render coverage):
+helm template test-release charts/app \
+  --set image.repository=registry.example.local:5000/test-app --set image.tag=test \
+  --set job.enabled=true --set job.name=migrate --set job.nameSuffix=ci \
+  --set-json 'job.command=["/app/bin/migrate","up"]' --show-only templates/job.yaml > /dev/null
+helm template test-release charts/app \
+  --set image.repository=registry.example.local:5000/test-app --set image.tag=test \
+  --set migrations.enabled=true --show-only templates/job-migrations.yaml > /dev/null
+helm template test-release charts/app \
+  --set image.repository=registry.example.local:5000/test-app --set image.tag=test \
+  --set cronJobs[0].name=cleanup --set cronJobs[0].schedule='0 3 * * *' \
+  --show-only templates/cronjob.yaml > /dev/null
 
 # 5. Workflow shell logic (matches ci.yml -> validate-shell-logic)
 bash tests/canary-image-resolution.sh
 bash tests/k8s-image-references.sh
+bash tests/bluegreen-slot-flip.sh
+bash tests/k8s-job-run.sh
 
 # 6. Release dry-run (optional; needs GITHUB_TOKEN)
 npx semantic-release --dry-run
@@ -185,6 +204,8 @@ consumer repo. It calls them via the local `./.github/workflows/` ref with safe 
 - `docker-build-push.yml` build-only (`push: false`)
 - `k8s-deploy.yml` with `dry-run: true` (`helm template`, no cluster contact)
 - `k8s-canary.yml` / `k8s-bluegreen.yml` with `dry-run: true` for every phase
+- `k8s-job.yml` with `dry-run: true` for `action: run` only — the CronJob actions need a live
+  CronJob, so `tests/k8s-job-run.sh` covers them instead
 
 Because every smoke job is a dry run, cluster-facing logic is only reachable from the `tests/`
 shell-logic scripts (see section 4) — `k8s-canary.yml`'s image discovery from the live Helm release is
@@ -278,8 +299,9 @@ Before considering a change complete:
       ignore is scoped and justified (see the `job.workflow_*` trap in section 11 before assuming a
       finding is real).
 - [ ] `markdownlint . --config .markdownlint.json --ignore node_modules` is clean.
-- [ ] `bash tests/canary-image-resolution.sh` passes; if you touched shell in a `run:` block that
-      `dry-run` can't reach, it's covered by a `tests/` script.
+- [ ] `bash tests/canary-image-resolution.sh`, `bash tests/bluegreen-slot-flip.sh` and
+      `bash tests/k8s-job-run.sh` pass; if you touched shell in a `run:` block that `dry-run` can't
+      reach, it's covered by a `tests/` script.
 - [ ] `bash tests/action-node24-versions.sh` passes so JavaScript actions cannot regress to a
       Node.js 20 runtime.
 - [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.
@@ -318,6 +340,30 @@ Before considering a change complete:
 - **Don't quote the `${FLAGS}` expansions in `go`/`node`/`rust` `run:` steps.** They must word-split so a
   consumer can pass several flags in one string input; that's why each carries a
   `# shellcheck disable=SC2086`. SC2086 stays enabled everywhere else on purpose.
+- **Don't give Job/CronJob pods the app's full selector labels.** The app `Service` selects on
+  `app.kubernetes.io/name` + `instance`; a Job pod carrying both would join the Service endpoints and
+  take production traffic. `app.job.podLabels` suffixes the instance label for exactly this reason,
+  and every batch template runs user `podLabels` through `omit` for the reserved
+  `app.kubernetes.io/*` keys — stripping them, not merely emitting them first, since a duplicate YAML
+  key would leave the outcome to the decoder. Keep both when adding batch templates.
+- **Don't guess a chart-rendered resource name in a workflow.** `app.fullname` is
+  `<release>-<chart name>` and moves with `nameOverride`/`fullnameOverride`, so
+  `"${RELEASE_NAME}-${NAME}"` is wrong for a normal release. `k8s-job.yml` resolves a bare
+  `cronjob-name` by listing `app.kubernetes.io/instance=<release>,app.kubernetes.io/component=cronjob`
+  and matching the suffix, erroring on zero or multiple hits.
+- **Don't use Helm's `default` for a numeric chart value where `0` is meaningful.** `default` treats
+  `0` as empty, so `backoffLimit: 0` or `successfulJobsHistoryLimit: 0` would silently become the
+  fallback. The batch templates use `hasKey` instead.
+- **Don't switch `k8s-job.yml`'s wait loop to `kubectl wait --for=condition=complete`.** A single
+  `wait` can't short-circuit on failure, so a failed Job blocks for the whole `timeout-seconds`
+  before anyone sees the logs. The poll loop reads the Job's *terminal conditions* — never
+  `.status.failed`, which counts failed pods and is non-zero while a Job with `backoffLimit > 0` is
+  still retrying.
+- **Don't make `k8s-deploy.yml`'s `migrations` input a boolean.** It's a tri-state string
+  (`''` | `'true'` | `'false'`) so the default can mean "respect the values file"; a boolean default
+  of `false` would silently disable migrations for anyone who enabled them in their chart values.
+- **Don't force `blueGreen.preview.enabled=false`** from `k8s-bluegreen.yml`. The `preview` input
+  only ever sets it to `true`, so a consumer who enabled the preview in their values file keeps it.
 - **Don't raise `conventional-changelog-conventionalcommits` past `^9`** in `release.yml` without
   checking the notes of the release it produces. Paired with the
   `@semantic-release/release-notes-generator@^14` that `semantic-release@^25` pulls in, `^10` renders

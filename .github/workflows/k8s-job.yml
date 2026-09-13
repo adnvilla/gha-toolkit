@@ -1,0 +1,457 @@
+# Reusable workflow to run one-off Kubernetes Jobs (migrations, backfills, seeds) and to
+# operate the CronJobs shipped by charts/app.
+# Actions: run (render + apply a Job and wait for it) | trigger-cronjob | suspend-cronjob |
+# resume-cronjob. The Job is rendered from the same chart and values file the app deploys
+# with, so it inherits image, env, envFrom, resources and the ServiceAccount.
+# Assumes the runner has a working kubeconfig (see ARCHITECTURE.md).
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Kubernetes Job
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: >-
+          run (render a Job from the chart and wait for it), trigger-cronjob (create a Job from
+          an existing CronJob and wait for it), suspend-cronjob, or resume-cronjob.
+        required: false
+        type: string
+        default: 'run'
+      toolkit-ref:
+        description: >-
+          Optional override for the git ref of adnvilla/gha-toolkit to pull charts/app from.
+          Defaults to job.workflow_sha. Ignored when use-local-chart is true.
+        required: false
+        type: string
+        default: ''
+      ref:
+        description: >-
+          Git ref/SHA of the calling repo to check out (for the values file). Pass
+          github.event.workflow_run.head_sha explicitly for workflow_run-triggered CD.
+        required: false
+        type: string
+        default: ''
+      use-local-chart:
+        description: 'Use a chart from the calling repo instead of charts/app from gha-toolkit'
+        required: false
+        type: boolean
+        default: false
+      chart-path:
+        description: 'Path to the Helm chart'
+        required: false
+        type: string
+        default: 'charts/app'
+      job-template:
+        description: >-
+          Chart template to render for action=run, passed to helm template --show-only.
+          Only change it when using a local chart whose Job template lives elsewhere.
+        required: false
+        type: string
+        default: 'templates/job.yaml'
+      release-name:
+        description: 'Helm release name the Job belongs to (used for resource naming)'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace'
+        required: true
+        type: string
+      kube-context:
+        description: 'kubectl context to run against'
+        required: true
+        type: string
+      values-file:
+        description: 'Path to the values file in the calling repo (action=run)'
+        required: false
+        type: string
+        default: ''
+      image:
+        description: >-
+          Full image reference for the Job (action=run). References without a tag use latest.
+          When empty the image from the values file is used.
+        required: false
+        type: string
+        default: ''
+      job-name:
+        description: 'Name segment of the Job (rendered as <release>-<job-name>-<suffix>)'
+        required: false
+        type: string
+        default: 'job'
+      name-suffix:
+        description: >-
+          Suffix appended to the Job name so repeat runs never collide. Defaults to the run
+          id + attempt.
+        required: false
+        type: string
+        default: ''
+      command:
+        description: 'Container command (entrypoint) override, one argv entry per line'
+        required: false
+        type: string
+        default: ''
+      args:
+        description: 'Container args, one argv entry per line'
+        required: false
+        type: string
+        default: ''
+      cronjob-name:
+        description: >-
+          CronJob to act on for trigger/suspend/resume-cronjob. Accepts either the bare name
+          segment from the chart values (resolved to <release>-<name>) or a full resource name.
+        required: false
+        type: string
+        default: ''
+      helm-set:
+        description: 'Additional --set overrides, one KEY=VALUE per line (action=run)'
+        required: false
+        type: string
+        default: ''
+      timeout-seconds:
+        description: 'How long to wait for the Job to finish before failing the workflow'
+        required: false
+        type: number
+        default: 600
+      poll-interval-seconds:
+        description: 'Interval between Job status checks while waiting'
+        required: false
+        type: number
+        default: 5
+      tail-lines:
+        description: 'Number of log lines to print from the Job pods (-1 for all)'
+        required: false
+        type: number
+        default: -1
+      delete-on-success:
+        description: >-
+          Delete the Job once it succeeds. Off by default — the chart sets
+          ttlSecondsAfterFinished so the cluster reaps it while leaving logs briefly readable.
+        required: false
+        type: boolean
+        default: false
+      helm-version:
+        description: 'Helm version to install if not already present on the runner'
+        required: false
+        type: string
+        default: 'v3.16.2'
+      dry-run:
+        description: >-
+          Render the Job with helm template and print it instead of applying (no cluster access).
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'GitHub Environment name for this job'
+        required: false
+        type: string
+        default: 'production'
+      environment-url:
+        description: 'Optional URL shown next to the environment in the GitHub Actions UI'
+        required: false
+        type: string
+        default: ''
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'self-hosted'
+    outputs:
+      action:
+        description: 'Action that was executed'
+        value: ${{ jobs.k8s-job.outputs.action }}
+      job-name:
+        description: 'Name of the Job that was created (empty for suspend/resume)'
+        value: ${{ jobs.k8s-job.outputs.job-name }}
+      status:
+        description: 'succeeded, failed, rendered (dry-run) or patched (suspend/resume)'
+        value: ${{ jobs.k8s-job.outputs.status }}
+
+jobs:
+  k8s-job:
+    runs-on: ${{ inputs.runs-on }}
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ inputs.environment-url }}
+    outputs:
+      action: ${{ steps.render.outputs.action || steps.cronjob.outputs.action }}
+      job-name: ${{ steps.wait.outputs.job-name || steps.render.outputs.job-name || steps.cronjob.outputs.job-name }}
+      status: ${{ steps.wait.outputs.status || steps.render.outputs.status || steps.cronjob.outputs.status }}
+    steps:
+      - name: Validate inputs
+        env:
+          ACTION: ${{ inputs.action }}
+          VALUES_FILE: ${{ inputs.values-file }}
+          CRONJOB_NAME: ${{ inputs.cronjob-name }}
+        run: |
+          case "${ACTION}" in
+            run)
+              if [ -z "${VALUES_FILE}" ]; then
+                echo "::error::values-file is required for action=run"
+                exit 1
+              fi
+              ;;
+            trigger-cronjob|suspend-cronjob|resume-cronjob)
+              if [ -z "${CRONJOB_NAME}" ]; then
+                echo "::error::cronjob-name is required for action=${ACTION}"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::action must be run, trigger-cronjob, suspend-cronjob or resume-cronjob (got '${ACTION}')"
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout
+        if: ${{ inputs.action == 'run' }}
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Checkout gha-toolkit chart
+        if: ${{ inputs.action == 'run' && !inputs.use-local-chart }}
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.toolkit-ref || job.workflow_sha }}
+          path: .gha-toolkit-chart
+
+      - name: Setup Helm
+        if: ${{ inputs.action == 'run' }}
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ inputs.helm-version }}
+
+      - name: Select kube context
+        if: ${{ !inputs.dry-run }}
+        run: |
+          kubectl config use-context "${{ inputs.kube-context }}"
+          kubectl cluster-info
+
+      - name: Render Job manifest
+        id: render
+        if: ${{ inputs.action == 'run' }}
+        env:
+          USE_LOCAL_CHART: ${{ inputs.use-local-chart }}
+          CHART_PATH: ${{ inputs.chart-path }}
+          JOB_TEMPLATE: ${{ inputs.job-template }}
+          RELEASE_NAME: ${{ inputs.release-name }}
+          NAMESPACE: ${{ inputs.namespace }}
+          VALUES_FILE: ${{ inputs.values-file }}
+          IMAGE: ${{ inputs.image }}
+          JOB_NAME: ${{ inputs.job-name }}
+          NAME_SUFFIX: ${{ inputs.name-suffix }}
+          COMMAND: ${{ inputs.command }}
+          ARGS: ${{ inputs.args }}
+          HELM_SET: ${{ inputs.helm-set }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          MANIFEST: ${{ runner.temp }}/k8s-job.yaml
+        run: |
+          set -euo pipefail
+
+          if [ "${USE_LOCAL_CHART}" == "true" ]; then
+            CHART_DIR="${CHART_PATH}"
+          else
+            CHART_DIR=".gha-toolkit-chart/${CHART_PATH}"
+          fi
+
+          SUFFIX="${NAME_SUFFIX}"
+          if [ -z "${SUFFIX}" ]; then
+            SUFFIX="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fi
+
+          RENDER_ARGS=(
+            -n "${NAMESPACE}"
+            -f "${VALUES_FILE}"
+            --set "job.enabled=true"
+            --set "job.name=${JOB_NAME}"
+            --set "job.nameSuffix=${SUFFIX}"
+          )
+
+          if [ -n "${IMAGE}" ]; then
+            IMAGE_REPO="${IMAGE}"
+            IMAGE_TAG="latest"
+            if [[ "${IMAGE}" == *:* ]]; then
+              IMAGE_REPO="${IMAGE%:*}"
+              IMAGE_TAG="${IMAGE##*:}"
+            fi
+            RENDER_ARGS+=(--set "image.repository=${IMAGE_REPO}")
+            RENDER_ARGS+=(--set "image.tag=${IMAGE_TAG}")
+          fi
+
+          # command/args arrive as one argv entry per line; --set-json keeps entries with
+          # commas, spaces or quotes intact, which --set would mangle.
+          argv_json() {
+            LIST_RAW="$1" python3 <<'PY'
+          import json, os
+          entries = [line for line in os.environ["LIST_RAW"].splitlines() if line.strip() != ""]
+          print(json.dumps(entries))
+          PY
+          }
+
+          if [ -n "${COMMAND}" ]; then
+            RENDER_ARGS+=(--set-json "job.command=$(argv_json "${COMMAND}")")
+          fi
+          if [ -n "${ARGS}" ]; then
+            RENDER_ARGS+=(--set-json "job.args=$(argv_json "${ARGS}")")
+          fi
+
+          while IFS= read -r kv; do
+            [ -z "$kv" ] && continue
+            RENDER_ARGS+=(--set "$kv")
+          done <<< "${HELM_SET}"
+
+          helm template "${RELEASE_NAME}" "${CHART_DIR}" \
+            "${RENDER_ARGS[@]}" --show-only "${JOB_TEMPLATE}" > "${MANIFEST}"
+
+          # --show-only renders exactly one Job; read its name without needing PyYAML on the
+          # runner (only the Python stdlib is assumed anywhere in this toolkit).
+          RENDERED_NAME="$(awk '/^kind: Job$/ { in_job = 1 } in_job && /^  name:/ { print $2; exit }' \
+            "${MANIFEST}")"
+          if [ -z "${RENDERED_NAME}" ]; then
+            echo "::error::no Job found in the rendered template ${JOB_TEMPLATE}"
+            exit 1
+          fi
+
+          echo "Rendered Job ${RENDERED_NAME}:"
+          cat "${MANIFEST}"
+
+          {
+            echo "action=run"
+            echo "job-name=${RENDERED_NAME}"
+            echo "manifest=${MANIFEST}"
+          } >> "${GITHUB_OUTPUT}"
+
+          if [ "${DRY_RUN}" == "true" ]; then
+            echo "status=rendered" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Apply Job
+        id: apply
+        if: ${{ inputs.action == 'run' && !inputs.dry-run }}
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          MANIFEST: ${{ steps.render.outputs.manifest }}
+        run: |
+          set -euo pipefail
+          kubectl apply -n "${NAMESPACE}" -f "${MANIFEST}"
+
+      - name: Operate CronJob
+        id: cronjob
+        if: ${{ inputs.action != 'run' && !inputs.dry-run }}
+        env:
+          ACTION: ${{ inputs.action }}
+          RELEASE_NAME: ${{ inputs.release-name }}
+          NAMESPACE: ${{ inputs.namespace }}
+          CRONJOB_NAME: ${{ inputs.cronjob-name }}
+          NAME_SUFFIX: ${{ inputs.name-suffix }}
+        run: |
+          set -euo pipefail
+
+          # Accept the chart's bare name segment ("cleanup") or the full resource name. The
+          # rendered name is <chart fullname>-<name>, and the fullname moves with
+          # nameOverride/fullnameOverride, so a bare name is discovered by label instead of being
+          # guessed as "<release>-<name>".
+          if kubectl get cronjob "${CRONJOB_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+            CRONJOB="${CRONJOB_NAME}"
+          else
+            RELEASE_CRONJOBS="$(kubectl get cronjob -n "${NAMESPACE}" \
+              -l "app.kubernetes.io/instance=${RELEASE_NAME},app.kubernetes.io/component=cronjob" \
+              -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+            MATCHES="$(printf '%s\n' "${RELEASE_CRONJOBS}" | grep -E -- "(^|-)${CRONJOB_NAME}\$" || true)"
+            MATCH_COUNT="$(printf '%s' "${MATCHES}" | grep -c . || true)"
+            if [ "${MATCH_COUNT}" -eq 1 ]; then
+              CRONJOB="${MATCHES}"
+            elif [ "${MATCH_COUNT}" -eq 0 ]; then
+              echo "::error::no CronJob named '${CRONJOB_NAME}' in ${NAMESPACE} for release" \
+                "${RELEASE_NAME}. CronJobs in this release: ${RELEASE_CRONJOBS:-<none>}"
+              exit 1
+            else
+              echo "::error::'${CRONJOB_NAME}' matches several CronJobs (${MATCHES//$'\n'/, });" \
+                "pass the full resource name"
+              exit 1
+            fi
+          fi
+          echo "Resolved CronJob: ${CRONJOB}"
+
+          case "${ACTION}" in
+            trigger-cronjob)
+              SUFFIX="${NAME_SUFFIX}"
+              if [ -z "${SUFFIX}" ]; then
+                SUFFIX="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+              fi
+              # Truncate the CronJob part, never the suffix: Job names cap at 63 characters and a
+              # clipped suffix would collide with the previous attempt's Job.
+              JOB_BASE="$(printf '%s' "${CRONJOB}" | cut -c1-"$((62 - ${#SUFFIX}))")"
+              JOB="${JOB_BASE%-}-${SUFFIX}"
+              kubectl create job "${JOB}" --from="cronjob/${CRONJOB}" -n "${NAMESPACE}"
+              echo "job-name=${JOB}" >> "${GITHUB_OUTPUT}"
+              ;;
+            suspend-cronjob)
+              kubectl patch cronjob "${CRONJOB}" -n "${NAMESPACE}" -p '{"spec":{"suspend":true}}'
+              echo "status=patched" >> "${GITHUB_OUTPUT}"
+              ;;
+            resume-cronjob)
+              kubectl patch cronjob "${CRONJOB}" -n "${NAMESPACE}" -p '{"spec":{"suspend":false}}'
+              echo "status=patched" >> "${GITHUB_OUTPUT}"
+              ;;
+          esac
+          echo "action=${ACTION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for Job and collect logs
+        id: wait
+        if: ${{ !inputs.dry-run && (inputs.action == 'run' || inputs.action == 'trigger-cronjob') }}
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          JOB_NAME: ${{ steps.render.outputs.job-name || steps.cronjob.outputs.job-name }}
+          TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+          POLL_INTERVAL: ${{ inputs.poll-interval-seconds }}
+          TAIL_LINES: ${{ inputs.tail-lines }}
+          DELETE_ON_SUCCESS: ${{ inputs.delete-on-success }}
+        run: |
+          set -euo pipefail
+
+          # Poll instead of `kubectl wait --for=condition=complete`: a single wait cannot
+          # short-circuit on failure, so a failed Job would block for the whole timeout.
+          # Terminal conditions only — `.status.failed` counts failed pods, so with
+          # backoffLimit > 0 it is non-zero while the controller is still retrying.
+          DEADLINE=$((SECONDS + TIMEOUT_SECONDS))
+          STATUS="timeout"
+          while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
+            CONDITIONS="$(kubectl get job "${JOB_NAME}" -n "${NAMESPACE}" \
+              -o jsonpath='{range .status.conditions[?(@.status=="True")]}{.type}{" "}{end}' \
+              2>/dev/null || echo "")"
+            case " ${CONDITIONS} " in
+              *" Complete "*)
+                STATUS="succeeded"
+                break
+                ;;
+              *" Failed "*)
+                STATUS="failed"
+                break
+                ;;
+            esac
+            sleep "${POLL_INTERVAL}"
+          done
+
+          echo "::group::Logs for job/${JOB_NAME}"
+          kubectl logs "job/${JOB_NAME}" -n "${NAMESPACE}" \
+            --all-containers --tail="${TAIL_LINES}" || echo "(no logs available)"
+          echo "::endgroup::"
+
+          {
+            echo "job-name=${JOB_NAME}"
+            echo "status=${STATUS}"
+          } >> "${GITHUB_OUTPUT}"
+
+          if [ "${STATUS}" != "succeeded" ]; then
+            echo "::group::kubectl describe job/${JOB_NAME}"
+            kubectl describe job "${JOB_NAME}" -n "${NAMESPACE}" || true
+            echo "::endgroup::"
+            echo "::error::Job ${JOB_NAME} ${STATUS}"
+            exit 1
+          fi
+
+          if [ "${DELETE_ON_SUCCESS}" == "true" ]; then
+            kubectl delete job "${JOB_NAME}" -n "${NAMESPACE}"
+          fi

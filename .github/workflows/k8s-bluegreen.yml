@@ -1,5 +1,5 @@
 # Reusable workflow for blue/green deployments (e.g. Kafka workers) via Helm (charts/app).
-# Phases: deploy (ship inactive slot) → promote | abort.
+# Phases: deploy (ship inactive slot) → promote | abort, plus status (read-only).
 # The toolkit does not talk to Kafka — apps must share the same consumer group.id;
 # prefer overlap-seconds=0 unless handlers are idempotent under dual consumers.
 # Assumes the runner has a working kubeconfig (see ARCHITECTURE.md).
@@ -11,7 +11,9 @@ on:
   workflow_call:
     inputs:
       action:
-        description: 'Blue/green phase: deploy (update inactive slot), promote, or abort'
+        description: >-
+          Blue/green phase: deploy (update inactive slot), promote, abort, or status
+          (read the current slots without touching the release).
         required: true
         type: string
       toolkit-ref:
@@ -86,6 +88,42 @@ on:
         required: false
         type: number
         default: 0
+      preview:
+        description: >-
+          Render the chart's preview Service (and Ingress when the values file enables it) in
+          front of the INACTIVE slot, so the new version can be smoke-tested before promote.
+        required: false
+        type: boolean
+        default: false
+      verify-url:
+        description: >-
+          Optional HTTP(S) URL polled after a successful deploy/promote. On deploy point it at
+          the preview host (inactive slot); on promote at the live host. Empty disables the check.
+        required: false
+        type: string
+        default: ''
+      verify-expect-status:
+        description: 'HTTP status code verify-url must return'
+        required: false
+        type: number
+        default: 200
+      verify-timeout-seconds:
+        description: 'How long verify-url may take to start returning verify-expect-status'
+        required: false
+        type: number
+        default: 120
+      verify-interval-seconds:
+        description: 'Interval between verify-url probes'
+        required: false
+        type: number
+        default: 5
+      auto-abort:
+        description: >-
+          When verification fails after action=deploy, scale the inactive slot back to 0 (the
+          abort path) before failing the workflow, instead of leaving the bad slot running.
+        required: false
+        type: boolean
+        default: false
       helm-set:
         description: 'Additional --set overrides, one KEY=VALUE per line'
         required: false
@@ -138,6 +176,9 @@ on:
       active-slot:
         description: 'Active slot after this run'
         value: ${{ jobs.bluegreen.outputs.active-slot }}
+      inactive-slot:
+        description: 'Inactive slot after this run (the one the Service does not select)'
+        value: ${{ jobs.bluegreen.outputs.inactive-slot }}
       deployed-slot:
         description: 'Slot that received the new image on deploy (inactive before promote)'
         value: ${{ jobs.bluegreen.outputs.deployed-slot }}
@@ -154,6 +195,7 @@ jobs:
     outputs:
       action: ${{ steps.deploy.outputs.action }}
       active-slot: ${{ steps.deploy.outputs.active-slot }}
+      inactive-slot: ${{ steps.deploy.outputs.inactive-slot }}
       deployed-slot: ${{ steps.deploy.outputs.deployed-slot }}
       image: ${{ steps.deploy.outputs.image }}
     steps:
@@ -163,13 +205,14 @@ jobs:
           ACTIVE_SLOT_INPUT: ${{ inputs.active-slot }}
         run: |
           case "${ACTION}" in
-            deploy|promote|abort) ;;
+            deploy|promote|abort|status) ;;
             *)
-              echo "::error::action must be deploy, promote, or abort (got '${ACTION}')"
+              echo "::error::action must be deploy, promote, abort, or status (got '${ACTION}')"
               exit 1
               ;;
           esac
-          if [ "${ACTION}" != "abort" ] && [ -z "${{ inputs.image }}" ]; then
+          if { [ "${ACTION}" = "deploy" ] || [ "${ACTION}" = "promote" ]; } \
+            && [ -z "${{ inputs.image }}" ]; then
             echo "::error::image is required for action=${ACTION}"
             exit 1
           fi
@@ -218,6 +261,12 @@ jobs:
           ACTIVE_REPLICAS: ${{ inputs.active-replicas }}
           INACTIVE_REPLICAS: ${{ inputs.inactive-replicas }}
           OVERLAP_SECONDS: ${{ inputs.overlap-seconds }}
+          PREVIEW: ${{ inputs.preview }}
+          VERIFY_URL: ${{ inputs.verify-url }}
+          VERIFY_EXPECT_STATUS: ${{ inputs.verify-expect-status }}
+          VERIFY_TIMEOUT_SECONDS: ${{ inputs.verify-timeout-seconds }}
+          VERIFY_INTERVAL_SECONDS: ${{ inputs.verify-interval-seconds }}
+          AUTO_ABORT: ${{ inputs.auto-abort }}
           HELM_SET: ${{ inputs.helm-set }}
           WAIT: ${{ inputs.wait }}
           ATOMIC: ${{ inputs.atomic }}
@@ -291,6 +340,25 @@ jobs:
           if [ -z "${GREEN_REPO}" ] && [ -n "${IMAGE_REPO}" ]; then
             GREEN_REPO="${IMAGE_REPO}"
             GREEN_TAG="${IMAGE_TAG}"
+          fi
+
+          # status is read-only: report the slots and the live image, touch nothing.
+          if [ "${ACTION}" == "status" ]; then
+            if [ "${ACTIVE_SLOT}" = "blue" ]; then
+              LIVE_REPO="${BLUE_REPO}"; LIVE_TAG="${BLUE_TAG}"
+            else
+              LIVE_REPO="${GREEN_REPO}"; LIVE_TAG="${GREEN_TAG}"
+            fi
+            echo "active slot: ${ACTIVE_SLOT} (${LIVE_REPO}:${LIVE_TAG})"
+            echo "inactive slot: ${INACTIVE_SLOT}"
+            {
+              echo "action=status"
+              echo "active-slot=${ACTIVE_SLOT}"
+              echo "inactive-slot=${INACTIVE_SLOT}"
+              echo "deployed-slot="
+              echo "image=${LIVE_REPO}:${LIVE_TAG}"
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
 
           BLUE_REPLICAS="${ACTIVE_REPLICAS}"
@@ -371,26 +439,35 @@ jobs:
             TOP_REPO="${GREEN_REPO}"; TOP_TAG="${GREEN_TAG}"
           fi
 
-          RENDER_ARGS=(
-            -n "${NAMESPACE}"
-            -f "${VALUES_FILE}"
-            --set "strategy.mode=blueGreen"
-            --set "blueGreen.activeSlot=${NEW_ACTIVE}"
-            --set "blueGreen.overlapSeconds=${OVERLAP_SECONDS}"
-            --set "image.repository=${TOP_REPO}"
-            --set "image.tag=${TOP_TAG}"
-            --set "blueGreen.blue.image.repository=${BLUE_REPO}"
-            --set "blueGreen.blue.image.tag=${BLUE_TAG}"
-            --set "blueGreen.blue.replicas=${BLUE_REPLICAS}"
-            --set "blueGreen.green.image.repository=${GREEN_REPO}"
-            --set "blueGreen.green.image.tag=${GREEN_TAG}"
-            --set "blueGreen.green.replicas=${GREEN_REPLICAS}"
-          )
+          # Rebuilt from the current slot variables before every apply (promote with an
+          # overlap window applies twice with different replica counts).
+          build_render_args() {
+            RENDER_ARGS=(
+              -n "${NAMESPACE}"
+              -f "${VALUES_FILE}"
+              --set "strategy.mode=blueGreen"
+              --set "blueGreen.activeSlot=${NEW_ACTIVE}"
+              --set "blueGreen.overlapSeconds=${OVERLAP_SECONDS}"
+              --set "image.repository=${TOP_REPO}"
+              --set "image.tag=${TOP_TAG}"
+              --set "blueGreen.blue.image.repository=${BLUE_REPO}"
+              --set "blueGreen.blue.image.tag=${BLUE_TAG}"
+              --set "blueGreen.blue.replicas=${BLUE_REPLICAS}"
+              --set "blueGreen.green.image.repository=${GREEN_REPO}"
+              --set "blueGreen.green.image.tag=${GREEN_TAG}"
+              --set "blueGreen.green.replicas=${GREEN_REPLICAS}"
+            )
+            # Only force the preview on: leaving it unset lets the values file decide.
+            if [ "${PREVIEW}" == "true" ]; then
+              RENDER_ARGS+=(--set "blueGreen.preview.enabled=true")
+            fi
+            while IFS= read -r kv; do
+              [ -z "$kv" ] && continue
+              RENDER_ARGS+=(--set "$kv")
+            done <<< "${HELM_SET}"
+          }
 
-          while IFS= read -r kv; do
-            [ -z "$kv" ] && continue
-            RENDER_ARGS+=(--set "$kv")
-          done <<< "${HELM_SET}"
+          build_render_args
 
           helm_apply() {
             if [ "${DRY_RUN}" == "true" ]; then
@@ -421,26 +498,52 @@ jobs:
               BLUE_REPLICAS="0"
               GREEN_REPLICAS="${ACTIVE_REPLICAS}"
             fi
-            RENDER_ARGS=(
-              -n "${NAMESPACE}"
-              -f "${VALUES_FILE}"
-              --set "strategy.mode=blueGreen"
-              --set "blueGreen.activeSlot=${NEW_ACTIVE}"
-              --set "blueGreen.overlapSeconds=${OVERLAP_SECONDS}"
-              --set "image.repository=${TOP_REPO}"
-              --set "image.tag=${TOP_TAG}"
-              --set "blueGreen.blue.image.repository=${BLUE_REPO}"
-              --set "blueGreen.blue.image.tag=${BLUE_TAG}"
-              --set "blueGreen.blue.replicas=${BLUE_REPLICAS}"
-              --set "blueGreen.green.image.repository=${GREEN_REPO}"
-              --set "blueGreen.green.image.tag=${GREEN_TAG}"
-              --set "blueGreen.green.replicas=${GREEN_REPLICAS}"
-            )
-            while IFS= read -r kv; do
-              [ -z "$kv" ] && continue
-              RENDER_ARGS+=(--set "$kv")
-            done <<< "${HELM_SET}"
+            build_render_args
             helm_apply
+          fi
+
+          # Health gate. On deploy the URL should point at the preview host (inactive slot);
+          # on promote at the live host. Skipped in dry-run, which never reaches a cluster.
+          verify_slot() {
+            local deadline=$((SECONDS + VERIFY_TIMEOUT_SECONDS))
+            local code=""
+            while [ "${SECONDS}" -lt "${deadline}" ]; do
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "${VERIFY_URL}" || echo "000")"
+              if [ "${code}" = "${VERIFY_EXPECT_STATUS}" ]; then
+                echo "Verified ${VERIFY_URL} -> ${code}"
+                return 0
+              fi
+              echo "Waiting for ${VERIFY_URL} (last status ${code}, want ${VERIFY_EXPECT_STATUS})"
+              sleep "${VERIFY_INTERVAL_SECONDS}"
+            done
+            echo "::error::${VERIFY_URL} did not return ${VERIFY_EXPECT_STATUS}" \
+              "within ${VERIFY_TIMEOUT_SECONDS}s (last ${code})"
+            return 1
+          }
+
+          if [ -n "${VERIFY_URL}" ] && [ "${DRY_RUN}" != "true" ] \
+            && { [ "${ACTION}" == "deploy" ] || [ "${ACTION}" == "promote" ]; }; then
+            if ! verify_slot; then
+              if [ "${AUTO_ABORT}" == "true" ] && [ "${ACTION}" == "deploy" ]; then
+                echo "::warning::Verification failed — aborting: scaling ${INACTIVE_SLOT} back to 0"
+                NEW_ACTIVE="${ACTIVE_SLOT}"
+                if [ "${INACTIVE_SLOT}" = "green" ]; then
+                  GREEN_REPLICAS="0"
+                  BLUE_REPLICAS="${ACTIVE_REPLICAS}"
+                else
+                  BLUE_REPLICAS="0"
+                  GREEN_REPLICAS="${ACTIVE_REPLICAS}"
+                fi
+                if [ "${NEW_ACTIVE}" = "blue" ]; then
+                  TOP_REPO="${BLUE_REPO}"; TOP_TAG="${BLUE_TAG}"
+                else
+                  TOP_REPO="${GREEN_REPO}"; TOP_TAG="${GREEN_TAG}"
+                fi
+                build_render_args
+                helm_apply
+              fi
+              exit 1
+            fi
           fi
 
           OUT_IMAGE="${IMAGE}"
@@ -451,6 +554,7 @@ jobs:
           {
             echo "action=${ACTION}"
             echo "active-slot=${NEW_ACTIVE}"
+            echo "inactive-slot=$([ "${NEW_ACTIVE}" = "blue" ] && echo green || echo blue)"
             echo "deployed-slot=${DEPLOYED_SLOT}"
             echo "image=${OUT_IMAGE}"
           } >> "${GITHUB_OUTPUT}"

@@ -13,7 +13,11 @@ metadata:
     {{- include "app.labels" $ | nindent 4 }}
     app.kubernetes.io/slot: {{ $slot }}
 spec:
+  {{- /* Active slot under an HPA: omit replicas so Helm does not fight the autoscaler.
+         The inactive slot always keeps its explicit count (normally 0). */}}
+  {{- if not (and $.Values.autoscaling.enabled (eq $slot $.Values.blueGreen.activeSlot)) }}
   replicas: {{ $slotValues.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "app.slot.selectorLabels" $ctx | nindent 6 }}

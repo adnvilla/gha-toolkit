@@ -1,0 +1,54 @@
+{{- /* Scheduled CronJobs. `cronJobs` is a list; each entry takes the same shape as
+       `job` plus `schedule`. Deployed together with the app by k8s-deploy.yml. */ -}}
+{{- range $cron := .Values.cronJobs }}
+{{- if ne $cron.enabled false }}
+{{- $name := required "each cronJobs entry needs a name" $cron.name }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "app.cronjob.fullname" (dict "root" $ "name" $name) }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: cronjob
+  {{- with $cron.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ required "each cronJobs entry needs a schedule" $cron.schedule | quote }}
+  {{- with $cron.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ $cron.suspend | default false }}
+  concurrencyPolicy: {{ $cron.concurrencyPolicy | default "Forbid" }}
+  {{- /* hasKey, not `default`: a limit of 0 ("keep no finished Jobs") is valid and `default`
+         would silently replace it. */}}
+  successfulJobsHistoryLimit: {{ if hasKey $cron "successfulJobsHistoryLimit" }}{{ $cron.successfulJobsHistoryLimit }}{{ else }}3{{ end }}
+  failedJobsHistoryLimit: {{ if hasKey $cron "failedJobsHistoryLimit" }}{{ $cron.failedJobsHistoryLimit }}{{ else }}1{{ end }}
+  {{- if hasKey $cron "startingDeadlineSeconds" }}
+  startingDeadlineSeconds: {{ $cron.startingDeadlineSeconds }}
+  {{- end }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "app.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: cronjob
+    spec:
+      {{- include "app.job.spec" (dict "job" $cron) | nindent 6 }}
+      template:
+        metadata:
+          labels:
+            {{- /* Reserved selector keys are stripped from the user map — see job.yaml. */}}
+            {{- with omit ($cron.podLabels | default dict) "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" "app.kubernetes.io/managed-by" }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- include "app.job.podLabels" (dict "root" $ "name" $name) | nindent 12 }}
+          {{- with $cron.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- include "app.job.podSpec" (dict "root" $ "job" $cron) | nindent 10 }}
+{{- end }}
+{{- end }}

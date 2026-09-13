@@ -1,6 +1,8 @@
 {{- $mode := include "app.strategyMode" . -}}
-{{- /* HPA targets the stable/rolling Deployment only — not blue/green slots. */ -}}
-{{- if and .Values.autoscaling.enabled (or (eq $mode "rolling") (eq $mode "canary")) -}}
+{{- /* HPA targets the rolling/canary stable Deployment, or the ACTIVE blue/green slot.
+       The blueGreen Deployment omits `replicas` for the active slot when this is enabled,
+       so Helm and the HPA never fight over the replica count. */ -}}
+{{- if .Values.autoscaling.enabled -}}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -11,7 +13,11 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
+    {{- if eq $mode "blueGreen" }}
+    name: {{ include "app.slot.fullname" (dict "root" . "slot" .Values.blueGreen.activeSlot) }}
+    {{- else }}
     name: {{ include "app.fullname" . }}
+    {{- end }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

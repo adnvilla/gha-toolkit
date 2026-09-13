@@ -253,9 +253,12 @@ jobs:
 
 ### 8. Kubernetes Blue/Green Deploy (`k8s-bluegreen.yml`)
 
-Slot-based cutover for workers (e.g. Kafka consumers): deploy the new image to the inactive slot,
-then `promote` (flip `activeSlot`) or `abort`. Same consumer `group.id` on both slots; prefer
-`overlap-seconds: 0`. See `EXAMPLES.md` Example 13.
+Slot-based cutover for workers (e.g. Kafka consumers) **and HTTP APIs**: deploy the new image to
+the inactive slot, then `promote` (flip `activeSlot`) or `abort`. `status` reads the current slots
+without touching the release, so CD can decide what to do next. For HTTP apps set `preview: true`
+to get a Service (and optional Ingress on `preview.<host>`) in front of the inactive slot, and
+point `verify-url` at it to gate the promote. Same consumer `group.id` on both slots for Kafka;
+prefer `overlap-seconds: 0`. See `EXAMPLES.md` Example 13.
 
 ```yaml
 jobs:
@@ -263,12 +266,15 @@ jobs:
     needs: build
     uses: adnvilla/gha-toolkit/.github/workflows/k8s-bluegreen.yml@master
     with:
-      action: deploy   # deploy | promote | abort
+      action: deploy   # deploy | promote | abort | status
       release-name: my-worker
       namespace: my-worker
       kube-context: local
       values-file: k8s/values-worker.yaml
       image: ${{ needs.build.outputs.image }}
+      preview: true                                 # Optional: expose the inactive slot
+      verify-url: https://preview.api.example.com/healthz  # Optional health gate
+      auto-abort: true                              # Optional: roll the slot back if it fails
 ```
 
 ### 9. Rust Build and Test (`rust.yml`)
@@ -292,6 +298,37 @@ jobs:
       run-tests: true              # Optional, default: true
       postgres-enabled: false      # Optional, default: false (set true for DB integration tests)
 ```
+
+### 10. Kubernetes Jobs and CronJobs (`k8s-job.yml`)
+
+One-off Jobs (migrations, backfills, seeds) and CronJob operations, rendered from the same
+`charts/app` chart and values file the app deploys with — so the Job inherits the image, `env`,
+`envFrom`, `resources` and ServiceAccount instead of duplicating them. The workflow waits for the
+Job, streams its logs and fails the build when the Job fails. Scheduled work belongs in the
+`cronJobs` list in your values file and ships with `k8s-deploy.yml`; this workflow triggers,
+suspends and resumes those CronJobs on demand. See `EXAMPLES.md` Example 14.
+
+```yaml
+jobs:
+  migrate:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-job.yml@master
+    with:
+      action: run   # run | trigger-cronjob | suspend-cronjob | resume-cronjob
+      release-name: my-api
+      namespace: my-api
+      kube-context: local
+      values-file: k8s/values-local.yaml
+      image: ${{ needs.build.outputs.image }}
+      job-name: migrate
+      command: |
+        /app/bin/migrate
+      args: |
+        up
+```
+
+To run migrations automatically as part of every deploy instead, set `migrations: 'true'` on
+`k8s-deploy.yml`: the Job runs as a Helm `pre-upgrade` hook and a failure aborts the release.
 
 ## 🚀 Future Workflows
 
