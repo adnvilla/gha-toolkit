@@ -280,15 +280,17 @@ in `CONTRIBUTING.md`/`ARCHITECTURE.md`):
 | --- | --- |
 | `feat:` | minor |
 | `fix:`, `perf:`, `revert:`, `docs:`, `refactor:` | patch |
-| `feat!:` / `BREAKING CHANGE:` footer | major (only because the `breaking` rule is listed first — see below) |
+| `feat!:` / `BREAKING CHANGE:` footer | major (only because `releaseRules` carries an explicit `breaking` rule — see below) |
 | `chore:`, `test:`, `build:`, `ci:` | no release |
 
-**`{ "breaking": true, "release": "major" }` must stay the FIRST entry of `releaseRules`.**
-`commit-analyzer` evaluates custom rules before its built-in ones and stops at the first match, so a
-`{ "type": "feat" }` rule placed above it matches `feat!:` (and any commit carrying a
-`BREAKING CHANGE:` footer) first and downgrades the release to a minor. This is not hypothetical:
-v1.7.0 shipped a documented breaking chart change as a minor because the rule was missing.
-`tests/release-rules.sh` guards the ordering in both `.releaserc.json` and `.releaserc.json.example`.
+**`releaseRules` must keep its `{ "breaking": true, "release": "major" }` entry.** `commit-analyzer`
+falls back to its built-in rules only for commits that **no** custom rule matched, so a custom list
+covering `feat`/`fix`/`chore`/... shadows the built-in `breaking -> major` rule and breaking changes
+ship at the matched rule's level. v1.7.0 is the live example: it carries a documented breaking chart
+change and released as a minor. Position in the list is irrelevant — `commit-analyzer` keeps the
+highest release type among all matching rules — so this is about presence, not ordering.
+`tests/release-rules.sh` guards it in both `.releaserc.json` and `.releaserc.json.example`; its
+header records the measured behaviour.
 
 Release flow: commit to `master` -> `ci.yml` lints/validates -> on success `auto-release.yml` fires ->
 `semantic-release` (config in `.releaserc.json`) analyzes commits, bumps version, updates `CHANGELOG.md`,
@@ -376,10 +378,13 @@ Before considering a change complete:
   of `false` would silently disable migrations for anyone who enabled them in their chart values.
 - **Don't force `blueGreen.preview.enabled=false`** from `k8s-bluegreen.yml`. The `preview` input
   only ever sets it to `true`, so a consumer who enabled the preview in their values file keeps it.
-- **Don't reorder `releaseRules` so a `type` rule precedes the `breaking` rule.** `commit-analyzer`
-  stops at the first matching rule, so `{ "type": "feat" }` above `{ "breaking": true }` silently
-  turns every `feat!:` / `BREAKING CHANGE:` commit into a minor release. The release notes still
-  render the `⚠ BREAKING CHANGES` section, so nothing looks wrong — only the version number lies.
+- **Don't drop the `{ "breaking": true, "release": "major" }` entry from `releaseRules`.**
+  `commit-analyzer` only falls back to its built-in rules for commits that no custom rule matched, so
+  a custom list covering the usual types shadows the built-in `breaking -> major` rule entirely and
+  every `feat!:` / `BREAKING CHANGE:` commit releases at the matched rule's level (a `chore:` with a
+  breaking footer releases nothing at all). The release notes still render the
+  `⚠ BREAKING CHANGES` section, so nothing looks wrong — only the version number lies. Order within
+  the list does not matter: the highest matching release type wins.
 - **Don't raise `conventional-changelog-conventionalcommits` past `^9`** in `release.yml` without
   checking the notes of the release it produces. Paired with the
   `@semantic-release/release-notes-generator@^14` that `semantic-release@^25` pulls in, `^10` renders

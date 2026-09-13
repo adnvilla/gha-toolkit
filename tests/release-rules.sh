@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Guards the one ordering rule that makes breaking changes release a major version.
+# Guards the rule that makes breaking changes release a major version.
 #
-# @semantic-release/commit-analyzer evaluates custom `releaseRules` BEFORE its built-in ones, and
-# it stops at the first match. A `{ "type": "feat" }` rule therefore matches `feat!:` — and any
-# `feat:` carrying a `BREAKING CHANGE:` footer — before the built-in
-# `{ breaking: true, release: "major" }` rule is ever reached, so the breaking change ships as a
-# minor. That is how v1.7.0 shipped a documented breaking chart change without a major bump.
-# Verified against @semantic-release/commit-analyzer@13 + conventionalcommits@9:
+# @semantic-release/commit-analyzer consults its built-in rules ONLY when no custom `releaseRules`
+# entry matched the commit. A custom list that covers `feat`/`fix`/`chore`/... therefore shadows the
+# built-in `{ breaking: true, release: "major" }` rule for every commit it matches, and breaking
+# changes silently ship at the matched rule's level. That is how v1.7.0 shipped a documented
+# breaking chart change as a minor.
 #
-#   releaseRules without the breaking rule first   feat!: -> minor, fix!+footer -> patch
-#   releaseRules with    the breaking rule first   feat!: -> major, fix!+footer -> major
+# Order inside the list does NOT matter: commit-analyzer keeps the highest release type among all
+# matching rules. Measured against @semantic-release/commit-analyzer@13 with
+# conventional-changelog-conventionalcommits@9:
 #
-# A `{ "breaking": true, "release": "major" }` entry must therefore come first in every
-# releaseRules list in this repo, including the template consumers copy.
+#   rules                    feat!:   feat: + BREAKING CHANGE footer   chore: + footer
+#   without a breaking rule  minor    minor                            no release
+#   breaking rule first      major    major                            major
+#   breaking rule last       major    major                            major
+#
+# So the invariant to guard is presence, not position: every custom releaseRules list must carry a
+# `{ "breaking": true, "release": "major" }` entry.
 #
 # Usage: bash tests/release-rules.sh [config...]
 set -euo pipefail
@@ -44,25 +49,28 @@ for path in os.environ["CONFIG_LIST"].split():
             break
 
     if rules is None:
-        print("-- %s: no commit-analyzer releaseRules, nothing to guard" % path)
+        # No custom rules means the built-in ones apply, and those already release breaking
+        # changes as major.
+        print("-- %s: no custom releaseRules, the built-in rules apply" % path)
         continue
 
-    first = rules[0] if rules else {}
-    if first.get("breaking") is True and first.get("release") == "major":
-        print("-- %s: breaking -> major is the first rule" % path)
+    breaking = [rule for rule in rules if rule.get("breaking") is True]
+
+    if not breaking:
+        failures += 1
+        print('FAIL: %s has custom releaseRules but no { "breaking": true } entry' % path)
+        print("      custom rules shadow commit-analyzer's built-in rules for every commit they "
+              "match, so breaking changes would ship at the matched rule's level")
         continue
 
-    failures += 1
-    print("FAIL: %s does not start releaseRules with "
-          '{ "breaking": true, "release": "major" }' % path)
-    if any(r.get("breaking") is True for r in rules):
-        print("      the rule exists but is preceded by %d rule(s); commit-analyzer stops at the "
-              "first match, so a `type` rule above it wins for feat!/BREAKING CHANGE commits"
-              % next(i for i, r in enumerate(rules) if r.get("breaking") is True))
-    else:
-        print("      breaking changes would be released as %s, not major"
-              % (first.get("release") or "no release"))
-    print("      first rule is: %s" % json.dumps(first))
+    wrong = [rule for rule in breaking if rule.get("release") != "major"]
+    if wrong:
+        failures += 1
+        print("FAIL: %s releases breaking changes as %s"
+              % (path, ", ".join(str(rule.get("release")) for rule in wrong)))
+        continue
+
+    print("-- %s: breaking changes release as major" % path)
 
 if failures:
     sys.exit("%d config(s) would release a breaking change without a major bump" % failures)
