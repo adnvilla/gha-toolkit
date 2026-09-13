@@ -1,3 +1,13 @@
+## [1.7.1](https://github.com/adnvilla/gha-toolkit/compare/v1.7.0...v1.7.1) (2026-09-13)
+
+### 🐛 Bug Fixes
+
+* release breaking changes as a major version ([ca88f1f](https://github.com/adnvilla/gha-toolkit/commit/ca88f1fdc24b60dc856fce2fa88782592fa9f312))
+
+### 📚 Documentation
+
+* correct why releaseRules must carry a breaking rule ([a357fce](https://github.com/adnvilla/gha-toolkit/commit/a357fce781a0d2a884047d01a50b997e0f56b412))
+
 ## [1.7.0](https://github.com/adnvilla/gha-toolkit/compare/v1.6.6...v1.7.0) (2026-09-13)
 
 ### ⚠ BREAKING CHANGES
