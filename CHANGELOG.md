@@ -1,3 +1,26 @@
+## [1.7.0](https://github.com/adnvilla/gha-toolkit/compare/v1.6.6...v1.7.0) (2026-09-13)
+
+### ⚠ BREAKING CHANGES
+
+* in charts/app, strategy.mode=blueGreen previously rendered no
+Ingress, HPA or PodDisruptionBudget at all. Those values are still default-off,
+but a release that already sets ingress.enabled, autoscaling.enabled or
+podDisruptionBudget.enabled together with blueGreen will now get those resources
+created. Under an HPA the active slot's Deployment also stops setting replicas,
+handing the replica count to the autoscaler. Review such values files before
+upgrading the pinned workflow ref.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Lonz9bBFZDT4UR2wE4YuQV
+
+### 🚀 Features
+
+* add k8s-job.yml and extend blue/green to HTTP apps ([eb7363d](https://github.com/adnvilla/gha-toolkit/commit/eb7363db8bd462bd2ff7d67d5b02333ae3a5277f))
+
+### 🐛 Bug Fixes
+
+* address Codex review findings on jobs and CronJobs ([163c2c7](https://github.com/adnvilla/gha-toolkit/commit/163c2c79cb5f1bba553a580aa6d214a111babd64))
+
 ## [1.6.6](https://github.com/adnvilla/gha-toolkit/compare/v1.6.5...v1.6.6) (2026-07-27)
 
 ### 🐛 Bug Fixes
