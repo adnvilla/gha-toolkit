@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/adnvilla/gha-toolkit/compare/v1.7.1...v1.8.0) (2026-09-14)
+
+### 🚀 Features
+
+* compose ingress.host from prefix and cluster domain ([08aa28a](https://github.com/adnvilla/gha-toolkit/commit/08aa28a39749a58e88b479d3d0034d96483411a6)), closes [#43](https://github.com/adnvilla/gha-toolkit/issues/43)
+
 ## [1.7.1](https://github.com/adnvilla/gha-toolkit/compare/v1.7.0...v1.7.1) (2026-09-13)
 
 ### 🐛 Bug Fixes
