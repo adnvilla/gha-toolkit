@@ -75,6 +75,17 @@ on:
         required: false
         type: string
         default: ''
+      ingress-prefix:
+        description: >-
+          Hostname label prepended to INGRESS_BASE_DOMAIN to compose ingress.host
+          ({prefix}.{INGRESS_BASE_DOMAIN}). Empty (the default) uses release-name.
+          INGRESS_BASE_DOMAIN is read from the caller repo/environment var if set,
+          otherwise from the runner env. Composition is skipped when the values
+          file already sets ingress.host, when use-local-chart is true, or when
+          the base domain is unset. Does not auto-fill environment-url.
+        required: false
+        type: string
+        default: ''
       wait:
         description: 'Wait for resources to become ready'
         required: false
@@ -189,6 +200,8 @@ jobs:
           IMAGE: ${{ inputs.image }}
           MIGRATIONS: ${{ inputs.migrations }}
           HELM_SET: ${{ inputs.helm-set }}
+          INGRESS_PREFIX: ${{ inputs.ingress-prefix }}
+          INGRESS_BASE_DOMAIN_VAR: ${{ vars.INGRESS_BASE_DOMAIN }}
           WAIT: ${{ inputs.wait }}
           ATOMIC: ${{ inputs.atomic }}
           TIMEOUT: ${{ inputs.timeout }}
@@ -207,11 +220,33 @@ jobs:
             IMAGE_TAG="${IMAGE##*:}"
           fi
 
+          # Compose ingress.host = {prefix}.{INGRESS_BASE_DOMAIN} without clobbering
+          # a host already in the values file. --set would always win over -f; an
+          # extra values file applied BEFORE the caller's -f lets Helm's merge keep
+          # an existing host (including an explicit empty string). vars is mapped
+          # to INGRESS_BASE_DOMAIN_VAR so an empty GitHub var cannot wipe the
+          # runner env. Local charts (different schema) are left alone.
+          COMPOSED_INGRESS_FILE=""
+          INGRESS_COMPOSE_PREFIX="${INGRESS_PREFIX:-}"
+          [ -z "${INGRESS_COMPOSE_PREFIX}" ] && INGRESS_COMPOSE_PREFIX="${RELEASE_NAME}"
+          INGRESS_COMPOSE_BASE="${INGRESS_BASE_DOMAIN_VAR:-${INGRESS_BASE_DOMAIN:-}}"
+          if [ "${USE_LOCAL_CHART}" != "true" ] && [ -n "${INGRESS_COMPOSE_BASE}" ]; then
+            COMPOSED_INGRESS_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/gha-toolkit-ingress-host.XXXXXX")"
+            printf 'ingress:\n  host: "%s"\n' \
+              "${INGRESS_COMPOSE_PREFIX}.${INGRESS_COMPOSE_BASE}" > "${COMPOSED_INGRESS_FILE}"
+            echo "Composed ingress.host=${INGRESS_COMPOSE_PREFIX}.${INGRESS_COMPOSE_BASE}"
+          fi
+
           # Shared flags for both template (dry-run) and upgrade paths.
           # helm-set overrides are appended after the image --set so callers can
           # still override image.repository / image.tag if needed.
           RENDER_ARGS=(
             -n "${NAMESPACE}"
+          )
+          if [ -n "${COMPOSED_INGRESS_FILE}" ]; then
+            RENDER_ARGS+=(-f "${COMPOSED_INGRESS_FILE}")
+          fi
+          RENDER_ARGS+=(
             -f "${VALUES_FILE}"
             --set "image.repository=${IMAGE_REPO}"
             --set "image.tag=${IMAGE_TAG}"

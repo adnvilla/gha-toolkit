@@ -316,6 +316,40 @@ affinity:
 
 See `charts/app/README.md` for the full list of values you can override this way.
 
+**Prefix-only Ingress host.** If the cluster publishes `INGRESS_BASE_DOMAIN` (GitHub Actions var on
+the caller repo/environment, or env on the self-hosted runner), omit `ingress.host` and pass a
+prefix. The workflow composes `{prefix}.{INGRESS_BASE_DOMAIN}` and will not overwrite a host already
+set in values (the `host: my-app.local` example above keeps working). Local charts
+(`use-local-chart: true`) are left alone.
+
+```yaml
+# .github/workflows/cd.yml — pin @master until a release ships ingress-prefix
+jobs:
+  deploy:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@master
+    with:
+      release-name: my-app-web
+      namespace: my-app
+      kube-context: local
+      values-file: k8s/values-local.yaml
+      image: ${{ needs.build.outputs.image }}
+      ingress-prefix: my-app          # optional; defaults to release-name
+      environment-url: https://my-app.example.com   # still caller-supplied
+```
+
+```yaml
+# k8s/values-local.yaml — hostname is composed at deploy time
+ingress:
+  enabled: true
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+# host omitted: becomes my-app.{INGRESS_BASE_DOMAIN}
+```
+
+The same `ingress-prefix` input exists on `k8s-canary.yml` and `k8s-bluegreen.yml`. Canary and
+preview hosts still derive from `ingress.host` (`canary.<host>` / `preview.<host>`).
+
 **Migrating a service that's currently deployed with raw `kubectl apply`?** The first `k8s-deploy.yml`
 run against it will fail (Helm refuses to adopt resources it doesn't own). Add `adopt-existing: true`
 to the `deploy` job for that one run only, then remove it — see "Migrating an existing deployment" in

@@ -111,7 +111,8 @@ jobs:
 ```
 
 `k8s/values-staging.yaml` is a second values file next to your existing `values-local.yaml` — same
-shape, different `ingress.host` (e.g. `staging.my-app.local` instead of `my-app.local`). See
+shape, different hostname. Prefer omitting `ingress.host` and passing `ingress-prefix: staging-my-app`
+(or a per-environment `INGRESS_BASE_DOMAIN` var) instead of copying a full FQDN. See
 `charts/app/README.md` for the full values reference.
 
 **Production is unaffected** — it keeps whatever trigger it already has (typically `workflow_run` after

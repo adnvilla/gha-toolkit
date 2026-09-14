@@ -48,6 +48,7 @@ charts/app/              # Generic Helm chart (rolling/canary/blueGreen + Job/mi
 tests/                   # Shell-logic tests: extract a workflow step's `run:` body and run it stubbed
   canary-image-resolution.sh  # k8s-canary.yml stable/canary image discovery (non-dry-run path)
   k8s-image-references.sh     # k8s workflow image parsing + rendered-reference regressions
+  ingress-host-composition.sh # prefix + INGRESS_BASE_DOMAIN host compose / non-clobber
   bluegreen-slot-flip.sh      # k8s-bluegreen.yml slot flip, status, preview and verify/auto-abort
   k8s-job-run.sh              # k8s-job.yml render/wait/CronJob logic (all non-dry-run)
   action-node24-versions.sh   # rejects action releases that still embed Node.js 20
@@ -138,6 +139,7 @@ helm template test-release charts/app \
 # 5. Workflow shell logic (matches ci.yml -> validate-shell-logic)
 bash tests/canary-image-resolution.sh
 bash tests/k8s-image-references.sh
+bash tests/ingress-host-composition.sh
 bash tests/bluegreen-slot-flip.sh
 bash tests/k8s-job-run.sh
 bash tests/release-rules.sh
@@ -311,14 +313,15 @@ Before considering a change complete:
       ignore is scoped and justified (see the `job.workflow_*` trap in section 11 before assuming a
       finding is real).
 - [ ] `markdownlint . --config .markdownlint.json --ignore node_modules` is clean.
-- [ ] `bash tests/canary-image-resolution.sh`, `bash tests/bluegreen-slot-flip.sh` and
-      `bash tests/k8s-job-run.sh` pass; if you touched shell in a `run:` block that `dry-run` can't
-      reach, it's covered by a `tests/` script.
+- [ ] `bash tests/canary-image-resolution.sh`, `bash tests/bluegreen-slot-flip.sh`,
+      `bash tests/k8s-job-run.sh` and `bash tests/ingress-host-composition.sh` pass; if you touched
+      shell in a `run:` block that `dry-run` can't reach, it's covered by a `tests/` script.
 - [ ] `bash tests/action-node24-versions.sh` passes so JavaScript actions cannot regress to a
       Node.js 20 runtime.
 - [ ] `bash tests/release-rules.sh` passes when `.releaserc.json` or `.releaserc.json.example`
       changed, so a breaking change still releases a major.
 - [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.
+- [ ] `bash tests/ingress-host-composition.sh` passes when ingress host composition changes.
 - [ ] If the chart changed: both `helm template` renders pass, `Chart.yaml` version bumped if
       consumer-visible, and `charts/app/README.md` values table updated.
 - [ ] Docs synced: new/changed reusable workflow -> add a usage example to `EXAMPLES.md`, update
@@ -378,6 +381,12 @@ Before considering a change complete:
   of `false` would silently disable migrations for anyone who enabled them in their chart values.
 - **Don't force `blueGreen.preview.enabled=false`** from `k8s-bluegreen.yml`. The `preview` input
   only ever sets it to `true`, so a consumer who enabled the preview in their values file keeps it.
+- **Don't compose `ingress.host` with `--set`.** `--set` always wins over `-f`, so it would clobber
+  a host already in the caller's values file. `k8s-deploy.yml` / canary / bluegreen write a tiny
+  extra values file and pass it *before* the caller's `-f`. Map GitHub `vars.INGRESS_BASE_DOMAIN`
+  to `INGRESS_BASE_DOMAIN_VAR` — binding `env.INGRESS_BASE_DOMAIN` to an empty var wipes the
+  runner env, which is the source the cluster actually publishes today. Skip composition when
+  `use-local-chart` is true (different values schema). Do not hardcode `sslip.io` or a cluster IP.
 - **Don't drop the `{ "breaking": true, "release": "major" }` entry from `releaseRules`.**
   `commit-analyzer` only falls back to its built-in rules for commits that no custom rule matched, so
   a custom list covering the usual types shadows the built-in `breaking -> major` rule entirely and

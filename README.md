@@ -226,6 +226,10 @@ jobs:
 The Kubernetes workflows accept tagged references, digest references, and registries with a port.
 An image reference without an explicit tag uses `latest`.
 
+HTTP apps can omit `ingress.host` from values and pass `ingress-prefix` (defaults to `release-name`).
+The workflow composes `ingress.host={prefix}.{INGRESS_BASE_DOMAIN}` from the caller repo/environment
+var or the runner env, and will not overwrite a host already set in the values file. See `EXAMPLES.md`.
+
 See `charts/app/README.md` for the full values reference, `ENVIRONMENTS.md` for staging/production
 setup, and `EXAMPLES.md` for a complete CI → build → deploy pipeline.
 

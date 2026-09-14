@@ -288,6 +288,11 @@ on:
   string rather than a boolean: a boolean default of `false` would silently override a values file
   that enables migrations. The Job inherits the image being deployed.
 - `helm-set` (string, one `KEY=VALUE` per line, for one-off overrides)
+- `ingress-prefix` (string, default `''`): hostname label composed with `INGRESS_BASE_DOMAIN` as
+  `ingress.host={prefix}.{INGRESS_BASE_DOMAIN}`. Empty uses `release-name`. The base domain is
+  read from the caller repo/environment var if set, otherwise from the runner env. Skipped when
+  the values file already sets `ingress.host`, when `use-local-chart` is true, or when the base
+  domain is unset. Does not auto-fill `environment-url`.
 - `wait` / `atomic` (boolean, default true), `timeout` (string, default `180s`)
 - `helm-version` (string, default `v3.16.2`, installed via `azure/setup-helm` if not already present)
 - `dry-run` (boolean, default false): renders the chart client-side via `helm template` — no
@@ -315,7 +320,11 @@ on:
    - If `adopt-existing`, deletes any pre-existing `deployment`/`service`/`ingress` matching
      `release-name` in `namespace`
    - Splits `image` into `image.repository`/`image.tag` (using `latest` when the reference
-     contains no colon) and runs
+     contains no colon). When `ingress-prefix` (or `release-name`) and `INGRESS_BASE_DOMAIN`
+     are both set, writes a small extra values file with `ingress.host` and passes it *before*
+     `-f <values-file>` so Helm's merge keeps a host already present in values (including an
+     explicit empty string). `--set` is not used for this — it would always clobber.
+   - Runs
      `helm upgrade --install --create-namespace -f <values-file> --set image.repository=... --set image.tag=... --wait --atomic`
      (or `helm template` with the same values/`--set` flags when `dry-run` is true — no
      `--create-namespace`/`--wait`/`--atomic`/`--timeout`, and no cluster contact)
@@ -346,8 +355,9 @@ canary), `promote` (canary → stable), `abort` (scale canary to 0). Uses `chart
 `strategy.mode=canary`. Does not replace `k8s-deploy.yml` (rolling remains the default path).
 
 **Key inputs:** `action` (required), same deploy inputs as `k8s-deploy.yml` (`release-name`,
-`namespace`, `kube-context`, `values-file`, `image`, …), plus `stable-image`, `canary-weight`,
-`canary-replicas`. Defaults `runs-on` to `self-hosted`.
+`namespace`, `kube-context`, `values-file`, `image`, `ingress-prefix`, …), plus `stable-image`,
+`canary-weight`, `canary-replicas`. Defaults `runs-on` to `self-hosted`.
+`canary.ingress.host` still defaults to `canary.<ingress.host>` in the chart.
 
 **Design Decisions:**
 - Promote/abort are separate workflow calls so GitHub Environments can gate cutover
@@ -366,10 +376,11 @@ canary), `promote` (canary → stable), `abort` (scale canary to 0). Uses `chart
 `deploy` (image on inactive slot), `promote` (flip `activeSlot`), `abort` (scale inactive to 0),
 plus `status` (read-only). Uses `strategy.mode=blueGreen`.
 
-**Key inputs:** `action`, deploy inputs, `active-slot`, `active-replicas`, `inactive-replicas`,
-`overlap-seconds` (prefer `0`), `preview`, `verify-url`, `verify-expect-status`,
-`verify-timeout-seconds`, `verify-interval-seconds`, `auto-abort`. Outputs `active-slot`,
-`inactive-slot`, `deployed-slot`, `image`.
+**Key inputs:** `action`, deploy inputs (including `ingress-prefix`), `active-slot`,
+`active-replicas`, `inactive-replicas`, `overlap-seconds` (prefer `0`), `preview`, `verify-url`,
+`verify-expect-status`, `verify-timeout-seconds`, `verify-interval-seconds`, `auto-abort`.
+`blueGreen.preview.ingress.host` still defaults to `preview.<ingress.host>` in the chart. Outputs
+`active-slot`, `inactive-slot`, `deployed-slot`, `image`.
 
 **Design Decisions:**
 - Toolkit never talks to Kafka — apps share `group.id`; document idempotency if using overlap

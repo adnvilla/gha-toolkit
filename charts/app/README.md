@@ -121,7 +121,7 @@ Details worth knowing:
 | `ingress.enabled` | `false` | Whether to render an Ingress (or Traefik IngressRoute when canary+traefik) |
 | `ingress.className` | unset | `ingressClassName`, if set |
 | `ingress.annotations` | `{}` | Ingress annotations (e.g. Traefik entrypoints) |
-| `ingress.host` | `""` | Ingress host |
+| `ingress.host` | `""` | Ingress host. `k8s-deploy.yml` / `k8s-canary.yml` / `k8s-bluegreen.yml` compose `{ingress-prefix}.{INGRESS_BASE_DOMAIN}` when both are set and this key is omitted from the values file |
 | `ingress.path` / `ingress.pathType` | `/` / `Prefix` | Ingress rule path |
 | `strategy.mode` | `rolling` | `rolling` \| `canary` \| `blueGreen` |
 | `canary.image.repository` / `tag` | `""` | Canary image (workflows set via `--set`) |

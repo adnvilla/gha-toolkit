@@ -83,6 +83,18 @@ on:
         required: false
         type: string
         default: ''
+      ingress-prefix:
+        description: >-
+          Hostname label prepended to INGRESS_BASE_DOMAIN to compose ingress.host
+          ({prefix}.{INGRESS_BASE_DOMAIN}). Empty (the default) uses release-name.
+          INGRESS_BASE_DOMAIN is read from the caller repo/environment var if set,
+          otherwise from the runner env. Composition is skipped when the values
+          file already sets ingress.host, when use-local-chart is true, or when
+          the base domain is unset. canary.ingress.host still defaults to
+          canary.<ingress.host>. Does not auto-fill environment-url.
+        required: false
+        type: string
+        default: ''
       wait:
         description: 'Wait for resources to become ready'
         required: false
@@ -199,6 +211,8 @@ jobs:
           CANARY_WEIGHT: ${{ inputs.canary-weight }}
           CANARY_REPLICAS: ${{ inputs.canary-replicas }}
           HELM_SET: ${{ inputs.helm-set }}
+          INGRESS_PREFIX: ${{ inputs.ingress-prefix }}
+          INGRESS_BASE_DOMAIN_VAR: ${{ vars.INGRESS_BASE_DOMAIN }}
           WAIT: ${{ inputs.wait }}
           ATOMIC: ${{ inputs.atomic }}
           TIMEOUT: ${{ inputs.timeout }}
@@ -272,8 +286,26 @@ jobs:
             CANARY_TAG="${PARSED_TAG}"
           fi
 
+          # Same ingress.host composition as k8s-deploy.yml: extra -f before the
+          # caller's values so an existing host is not clobbered; skip local charts.
+          COMPOSED_INGRESS_FILE=""
+          INGRESS_COMPOSE_PREFIX="${INGRESS_PREFIX:-}"
+          [ -z "${INGRESS_COMPOSE_PREFIX}" ] && INGRESS_COMPOSE_PREFIX="${RELEASE_NAME}"
+          INGRESS_COMPOSE_BASE="${INGRESS_BASE_DOMAIN_VAR:-${INGRESS_BASE_DOMAIN:-}}"
+          if [ "${USE_LOCAL_CHART}" != "true" ] && [ -n "${INGRESS_COMPOSE_BASE}" ]; then
+            COMPOSED_INGRESS_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/gha-toolkit-ingress-host.XXXXXX")"
+            printf 'ingress:\n  host: "%s"\n' \
+              "${INGRESS_COMPOSE_PREFIX}.${INGRESS_COMPOSE_BASE}" > "${COMPOSED_INGRESS_FILE}"
+            echo "Composed ingress.host=${INGRESS_COMPOSE_PREFIX}.${INGRESS_COMPOSE_BASE}"
+          fi
+
           RENDER_ARGS=(
             -n "${NAMESPACE}"
+          )
+          if [ -n "${COMPOSED_INGRESS_FILE}" ]; then
+            RENDER_ARGS+=(-f "${COMPOSED_INGRESS_FILE}")
+          fi
+          RENDER_ARGS+=(
             -f "${VALUES_FILE}"
             --set "strategy.mode=canary"
             --set "image.repository=${STABLE_REPO}"
