@@ -1,3 +1,13 @@
+## [1.9.0](https://github.com/adnvilla/gha-toolkit/compare/v1.8.0...v1.9.0) (2026-09-16)
+
+### 🚀 Features
+
+* add Python uv workflow ([6035d9f](https://github.com/adnvilla/gha-toolkit/commit/6035d9ff7fc9a12dd58dd2841460b44a682fcd22))
+
+### 🐛 Bug Fixes
+
+* lock Python uv dependencies ([2f415e3](https://github.com/adnvilla/gha-toolkit/commit/2f415e3e69cf1f309c9d4b8996777c407a9435ed))
+
 ## [1.8.0](https://github.com/adnvilla/gha-toolkit/compare/v1.7.1...v1.8.0) (2026-09-14)
 
 ### 🚀 Features
