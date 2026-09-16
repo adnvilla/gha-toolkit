@@ -14,10 +14,10 @@ on:
         type: string
         default: '3.12'
       uv-version:
-        description: 'uv version to install; empty reads the project configuration or action default'
+        description: 'uv version to install; override the pinned default only for a compatible version'
         required: false
         type: string
-        default: ''
+        default: '0.12.15'
       working-directory:
         description: 'Project directory containing pyproject.toml and uv.lock'
         required: false
@@ -117,7 +117,7 @@ jobs:
           ${{ inputs.run-format || inputs.run-lint || inputs.run-typecheck ||
           inputs.run-build || inputs.run-tests }}
         working-directory: ${{ inputs.working-directory }}
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Format
         if: ${{ inputs.run-format }}
@@ -127,7 +127,7 @@ jobs:
         run: |
           # Unquoted on purpose: the flag list must word-split.
           # shellcheck disable=SC2086
-          uv run ruff format ${FORMAT_ARGS}
+          uv run --no-sync ruff format ${FORMAT_ARGS}
 
       - name: Lint
         if: ${{ inputs.run-lint }}
@@ -137,7 +137,7 @@ jobs:
         run: |
           # Unquoted on purpose: the flag list must word-split.
           # shellcheck disable=SC2086
-          uv run ruff check ${LINT_ARGS}
+          uv run --no-sync ruff check ${LINT_ARGS}
 
       - name: Typecheck
         if: ${{ inputs.run-typecheck }}
@@ -147,7 +147,7 @@ jobs:
         run: |
           # Unquoted on purpose: the flag list must word-split.
           # shellcheck disable=SC2086
-          uv run mypy ${TYPECHECK_ARGS}
+          uv run --no-sync mypy ${TYPECHECK_ARGS}
 
       - name: Build
         if: ${{ inputs.run-build }}
@@ -167,4 +167,4 @@ jobs:
         run: |
           # Unquoted on purpose: the flag list must word-split.
           # shellcheck disable=SC2086
-          uv run pytest ${TEST_ARGS}
+          uv run --no-sync pytest ${TEST_ARGS}

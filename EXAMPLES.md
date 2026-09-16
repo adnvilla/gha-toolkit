@@ -803,6 +803,7 @@ jobs:
     uses: adnvilla/gha-toolkit/.github/workflows/python.yml@master
     with:
       python-version: '3.12'
+      uv-version: '0.12.15'
       working-directory: '.'
       test-args: '-q tests'
 ```

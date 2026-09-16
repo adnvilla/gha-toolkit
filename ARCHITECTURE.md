@@ -188,8 +188,8 @@ on:
 
 **Inputs:**
 - `python-version` (string): Python version (default: `3.12`)
-- `uv-version` (string): optional uv version; an empty value defers to project configuration or the
-  setup action's default
+- `uv-version` (string): uv version (default: `0.12.15`); callers can override it for a compatible
+  version
 - `working-directory` (string): project directory containing `pyproject.toml` and `uv.lock` (default:
   `.`)
 - `cache` (boolean): persist uv's dependency cache (default: true)
@@ -204,13 +204,15 @@ on:
 
 1. **build:**
    - Sets up Python with `actions/setup-python` and uv with `astral-sh/setup-uv`
-   - Caches uv dependencies and runs `uv sync --frozen` only when at least one check is enabled
-   - Runs `uv run ruff format`, `uv run ruff check`, `uv run mypy`, `uv build` and `uv run pytest`,
-     each behind its matching `run-*` input
+   - Caches uv dependencies and runs `uv sync --locked` only when at least one check is enabled
+   - Runs Ruff, mypy and pytest with `uv run --no-sync` after that verified sync; runs `uv build`;
+     each check is behind its matching `run-*` input
 
 **Design Decisions:**
 - Targets uv deliberately rather than guessing between pip, Poetry and Pipenv semantics. A project
   must carry `pyproject.toml` and `uv.lock`, making dependency resolution deterministic.
+- Pins the default uv release so a newly published uv version cannot change a consumer's CI behavior;
+  callers can deliberately override that version.
 - Does not own Docker or Kubernetes behavior: Python services use the same image build and Helm deploy
   workflows as every other runtime.
 - Cache invalidation is explicit and scoped to the selected project directory, which supports

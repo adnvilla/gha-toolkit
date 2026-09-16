@@ -61,11 +61,11 @@ run_step "Typecheck" TYPECHECK_ARGS='.'
 run_step "Build" BUILD_ARGS=''
 run_step "Test" TEST_ARGS=''
 
-assert_call 'sync --frozen'
-assert_call 'run ruff format --check .'
-assert_call 'run ruff check .'
-assert_call 'run mypy .'
+assert_call 'sync --locked'
+assert_call 'run --no-sync ruff format --check .'
+assert_call 'run --no-sync ruff check .'
+assert_call 'run --no-sync mypy .'
 assert_call 'build'
-assert_call 'run pytest'
+assert_call 'run --no-sync pytest'
 
 echo "all cases passed"

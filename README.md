@@ -154,8 +154,8 @@ jobs:
 ### 5. Python Build and Test (`python.yml`)
 
 Runs format, lint, type checking, build and tests for Python projects managed with uv. Each check is
-independently toggleable; the workflow installs the project with `uv sync --frozen`, so the lockfile
-is required when a check is enabled.
+independently toggleable; the workflow installs the project with `uv sync --locked`, so the lockfile
+must exist and match the project when a check is enabled.
 
 **Usage**:
 
@@ -165,6 +165,7 @@ jobs:
     uses: adnvilla/gha-toolkit/.github/workflows/python.yml@master
     with:
       python-version: '3.12'      # Optional, default: '3.12'
+      uv-version: '0.12.15'       # Optional, default: '0.12.15'
       working-directory: '.'       # Optional, default: '.'
       cache: true                  # Optional, default: true
       run-format: true             # Optional, default: true (ruff format --check)
