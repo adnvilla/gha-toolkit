@@ -1,0 +1,170 @@
+# Reusable workflow for Python projects managed with uv.
+# Runs formatting, linting, type checking, packaging and tests independently so
+# consumers can opt out of tooling their project does not use.
+# For more information see: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+name: Python Build and Test
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: 'Python version to use'
+        required: false
+        type: string
+        default: '3.12'
+      uv-version:
+        description: 'uv version to install; override the pinned default only for a compatible version'
+        required: false
+        type: string
+        default: '0.12.15'
+      working-directory:
+        description: 'Project directory containing pyproject.toml and uv.lock'
+        required: false
+        type: string
+        default: '.'
+      cache:
+        description: 'Whether to persist the uv dependency cache'
+        required: false
+        type: boolean
+        default: true
+      cache-dependency-glob:
+        description: 'Glob(s), relative to working-directory, used to invalidate the uv cache'
+        required: false
+        type: string
+        default: |
+          pyproject.toml
+          uv.lock
+      run-format:
+        description: 'Whether to run ruff format in check mode'
+        required: false
+        type: boolean
+        default: true
+      run-lint:
+        description: 'Whether to run ruff check'
+        required: false
+        type: boolean
+        default: true
+      run-typecheck:
+        description: 'Whether to run mypy'
+        required: false
+        type: boolean
+        default: true
+      run-build:
+        description: 'Whether to build Python distributions with uv build'
+        required: false
+        type: boolean
+        default: true
+      run-tests:
+        description: 'Whether to run pytest'
+        required: false
+        type: boolean
+        default: true
+      format-args:
+        description: 'Arguments passed to ruff format'
+        required: false
+        type: string
+        default: '--check .'
+      lint-args:
+        description: 'Arguments passed to ruff check'
+        required: false
+        type: string
+        default: '.'
+      typecheck-args:
+        description: 'Arguments passed to mypy'
+        required: false
+        type: string
+        default: '.'
+      build-args:
+        description: 'Arguments passed to uv build'
+        required: false
+        type: string
+        default: ''
+      test-args:
+        description: 'Arguments passed to pytest'
+        required: false
+        type: string
+        default: ''
+      runs-on:
+        description: 'Runner label to execute the job on'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: ${{ inputs.uv-version }}
+          python-version: ${{ inputs.python-version }}
+          working-directory: ${{ inputs.working-directory }}
+          enable-cache: ${{ inputs.cache }}
+          cache-dependency-glob: ${{ inputs.cache-dependency-glob }}
+          prune-cache: true
+
+      - name: Install dependencies
+        if: >-
+          ${{ inputs.run-format || inputs.run-lint || inputs.run-typecheck ||
+          inputs.run-build || inputs.run-tests }}
+        working-directory: ${{ inputs.working-directory }}
+        run: uv sync --locked
+
+      - name: Format
+        if: ${{ inputs.run-format }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          FORMAT_ARGS: ${{ inputs.format-args }}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          uv run --no-sync ruff format ${FORMAT_ARGS}
+
+      - name: Lint
+        if: ${{ inputs.run-lint }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          LINT_ARGS: ${{ inputs.lint-args }}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          uv run --no-sync ruff check ${LINT_ARGS}
+
+      - name: Typecheck
+        if: ${{ inputs.run-typecheck }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          TYPECHECK_ARGS: ${{ inputs.typecheck-args }}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          uv run --no-sync mypy ${TYPECHECK_ARGS}
+
+      - name: Build
+        if: ${{ inputs.run-build }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          BUILD_ARGS: ${{ inputs.build-args }}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          uv build ${BUILD_ARGS}
+
+      - name: Test
+        if: ${{ inputs.run-tests }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          TEST_ARGS: ${{ inputs.test-args }}
+        run: |
+          # Unquoted on purpose: the flag list must word-split.
+          # shellcheck disable=SC2086
+          uv run --no-sync pytest ${TEST_ARGS}

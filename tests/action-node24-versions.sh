@@ -33,6 +33,7 @@ check_minimum_major "actions/setup-node" 5
 check_minimum_major "actions/setup-python" 6
 check_minimum_major "azure/setup-helm" 5
 check_minimum_major "pnpm/action-setup" 5
+check_minimum_major "astral-sh/setup-uv" 9
 
 if [ "${FAILURES}" -ne 0 ]; then
   echo "${FAILURES} action reference(s) still use Node.js 20 or older"

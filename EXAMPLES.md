@@ -783,6 +783,70 @@ blueGreen:
 touching the release — use it when a scheduled or manual workflow needs to decide whether to
 deploy or promote.
 
+## Example 16: Python uv Service — CI/CD
+
+Use `python.yml` for a Python project with `pyproject.toml` and `uv.lock`. The service is packaged
+by its own Dockerfile, then follows the same immutable-image deployment path as Go, Node and Rust.
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: adnvilla/gha-toolkit/.github/workflows/python.yml@master
+    with:
+      python-version: '3.12'
+      uv-version: '0.12.15'
+      working-directory: '.'
+      test-args: '-q tests'
+```
+
+```yaml
+# .github/workflows/cd.yml
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  build:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
+    with:
+      ref: ${{ github.event.workflow_run.head_sha }}
+      dockerfile: Dockerfile
+      image-name: my-python-api
+      registry-host: registry.example.local:5001
+      runs-on: self-hosted
+
+  deploy:
+    needs: build
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@master
+    with:
+      ref: ${{ github.event.workflow_run.head_sha }}
+      environment: production
+      release-name: my-python-api
+      namespace: my-python-api
+      kube-context: ${{ vars.KUBE_CONTEXT }}
+      values-file: k8s/values-production.yaml
+      image: ${{ needs.build.outputs.image }}
+      runs-on: self-hosted
+```
+
+The Python image owns its launch command (for example, uvicorn or a worker). To run a database
+migration through the chart, set `migrations.command` and `migrations.args` in the values file, then
+pass `migrations: 'true'` to the deploy job.
+
 ## Important Notes
 
 ### Permissions

@@ -87,6 +87,7 @@ Located in `.github/workflows/`, one file per domain:
 
 - `go-base.yml` / `go.yml`: Go projects (without / with PostgreSQL)
 - `node.yml`: Node.js/TypeScript projects (pnpm, npm or yarn)
+- `python.yml`: Python projects managed with uv (format/lint/typecheck/build/test)
 - `rust.yml`: Rust projects (fmt/clippy/build/test, optional PostgreSQL)
 - `docker-build-push.yml`: Build and push a Docker image
 - `k8s-deploy.yml`: Rolling deploy to Kubernetes via Helm (`charts/app`)

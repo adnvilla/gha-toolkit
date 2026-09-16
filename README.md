@@ -151,7 +151,35 @@ jobs:
       run-tests: true             # Optional, default: true
 ```
 
-### 5. Docker Build and Push (`docker-build-push.yml`)
+### 5. Python Build and Test (`python.yml`)
+
+Runs format, lint, type checking, build and tests for Python projects managed with uv. Each check is
+independently toggleable; the workflow installs the project with `uv sync --locked`, so the lockfile
+must exist and match the project when a check is enabled.
+
+**Usage**:
+
+```yaml
+jobs:
+  ci:
+    uses: adnvilla/gha-toolkit/.github/workflows/python.yml@master
+    with:
+      python-version: '3.12'      # Optional, default: '3.12'
+      uv-version: '0.12.15'       # Optional, default: '0.12.15'
+      working-directory: '.'       # Optional, default: '.'
+      cache: true                  # Optional, default: true
+      run-format: true             # Optional, default: true (ruff format --check)
+      run-lint: true               # Optional, default: true (ruff check)
+      run-typecheck: true          # Optional, default: true (mypy)
+      run-build: true              # Optional, default: true (uv build)
+      run-tests: true              # Optional, default: true (pytest)
+```
+
+Use `format-args`, `lint-args`, `typecheck-args`, `build-args` and `test-args` to add flags or
+limit a command to a directory. Python services deploy with the existing
+`docker-build-push.yml` + `k8s-deploy.yml` chain; the Dockerfile remains owned by the consumer.
+
+### 6. Docker Build and Push (`docker-build-push.yml`)
 
 Builds a Docker image and pushes it to a registry (public or a private/local insecure one), tagging
 it with the short commit SHA plus any extra tags. Outputs `image` so a following job can consume the
@@ -190,7 +218,7 @@ jobs:
       registry-host: ghcr.io/my-org
 ```
 
-### 6. Kubernetes Deploy (`k8s-deploy.yml`)
+### 7. Kubernetes Deploy (`k8s-deploy.yml`)
 
 Deploys to Kubernetes via Helm using the generic chart shipped in this repo (`charts/app`), so
 consumers only need a small `values.yaml` instead of hand-written manifests. Runs
@@ -233,7 +261,7 @@ var or the runner env, and will not overwrite a host already set in the values f
 See `charts/app/README.md` for the full values reference, `ENVIRONMENTS.md` for staging/production
 setup, and `EXAMPLES.md` for a complete CI → build → deploy pipeline.
 
-### 7. Kubernetes Canary Deploy (`k8s-canary.yml`)
+### 8. Kubernetes Canary Deploy (`k8s-canary.yml`)
 
 Progressive delivery for HTTP APIs: deploy a canary alongside stable, then `promote` or `abort`.
 Uses `charts/app` with `strategy.mode=canary`. Traffic split is opt-in via Traefik
@@ -255,7 +283,7 @@ jobs:
       canary-weight: 10
 ```
 
-### 8. Kubernetes Blue/Green Deploy (`k8s-bluegreen.yml`)
+### 9. Kubernetes Blue/Green Deploy (`k8s-bluegreen.yml`)
 
 Slot-based cutover for workers (e.g. Kafka consumers) **and HTTP APIs**: deploy the new image to
 the inactive slot, then `promote` (flip `activeSlot`) or `abort`. `status` reads the current slots
@@ -281,7 +309,7 @@ jobs:
       auto-abort: true                              # Optional: roll the slot back if it fails
 ```
 
-### 9. Rust Build and Test (`rust.yml`)
+### 10. Rust Build and Test (`rust.yml`)
 
 Format/lint/build/test for Rust projects (e.g. REST API services). Runs `cargo fmt --check`,
 `cargo clippy`, `cargo build` and `cargo test`, each independently toggleable, with an optional
@@ -303,7 +331,7 @@ jobs:
       postgres-enabled: false      # Optional, default: false (set true for DB integration tests)
 ```
 
-### 10. Kubernetes Jobs and CronJobs (`k8s-job.yml`)
+### 11. Kubernetes Jobs and CronJobs (`k8s-job.yml`)
 
 One-off Jobs (migrations, backfills, seeds) and CronJob operations, rendered from the same
 `charts/app` chart and values file the app deploys with — so the Job inherits the image, `env`,
@@ -336,7 +364,6 @@ To run migrations automatically as part of every deploy instead, set `migrations
 
 ## 🚀 Future Workflows
 
-- Python (pytest, coverage, lint)
 - Terraform (plan, apply, security scan)
 
 Have an idea? Open an [issue](https://github.com/adnvilla/gha-toolkit/issues) or contribute following [CONTRIBUTING.md](CONTRIBUTING.md)
