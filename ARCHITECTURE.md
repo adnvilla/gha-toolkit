@@ -175,6 +175,47 @@ on:
 - Uses `actions/setup-node`'s built-in cache instead of manually caching the pnpm store (simpler than
   a hand-rolled `actions/cache` step)
 
+### python.yml
+
+**Purpose:** CI pipeline for Python projects managed with uv. It installs dependencies from the
+lockfile, then optionally verifies formatting, linting, type checking, package builds and tests.
+
+**Trigger:**
+```yaml
+on:
+  workflow_call:
+```
+
+**Inputs:**
+- `python-version` (string): Python version (default: `3.12`)
+- `uv-version` (string): optional uv version; an empty value defers to project configuration or the
+  setup action's default
+- `working-directory` (string): project directory containing `pyproject.toml` and `uv.lock` (default:
+  `.`)
+- `cache` (boolean): persist uv's dependency cache (default: true)
+- `cache-dependency-glob` (string): cache invalidation patterns relative to `working-directory`
+- `run-format` / `run-lint` / `run-typecheck` / `run-build` / `run-tests` (boolean): independently
+  toggleable checks (default: true)
+- `format-args`, `lint-args`, `typecheck-args`, `build-args`, `test-args` (string): extra flags for
+  Ruff, mypy, uv build and pytest
+- `runs-on` (string): runner label (default: `ubuntu-latest`)
+
+**Jobs:**
+
+1. **build:**
+   - Sets up Python with `actions/setup-python` and uv with `astral-sh/setup-uv`
+   - Caches uv dependencies and runs `uv sync --frozen` only when at least one check is enabled
+   - Runs `uv run ruff format`, `uv run ruff check`, `uv run mypy`, `uv build` and `uv run pytest`,
+     each behind its matching `run-*` input
+
+**Design Decisions:**
+- Targets uv deliberately rather than guessing between pip, Poetry and Pipenv semantics. A project
+  must carry `pyproject.toml` and `uv.lock`, making dependency resolution deterministic.
+- Does not own Docker or Kubernetes behavior: Python services use the same image build and Helm deploy
+  workflows as every other runtime.
+- Cache invalidation is explicit and scoped to the selected project directory, which supports
+  monorepos without hashing unrelated lockfiles.
+
 ### rust.yml
 
 **Purpose:** CI pipeline for Rust projects (e.g. REST API services) — format, lint, build and test,
@@ -468,6 +509,8 @@ the workflow YAML alone. The runner machine must have:
 - **helm** — deploy workflows install it via `azure/setup-helm` if missing, but a pre-installed
   version avoids the extra download on every run
 - **Node/pnpm/corepack** available if `node.yml` also runs on that runner
+- **GitHub Actions runner v2.327.1 or newer** if `python.yml` runs there: its Python setup action
+  requires the Node 24 action runtime
 - **python3** on the runner for canary/bluegreen release-value introspection (`helm get values -o json`)
   and for `k8s-job.yml`'s `command`/`args` JSON encoding — stdlib only, no PyYAML
 - **curl** on the runner if `k8s-bluegreen.yml`'s `verify-url` health gate is used
@@ -504,8 +547,8 @@ on:
    (rolling, optional resources, canary, canary+traefik, blueGreen), to catch broken chart templates
    before they ship in a tag
 5. **validate-shell-logic:** Runs the workflow shell-logic tests, which extract a workflow step's
-   `run:` body and execute it against stubbed `helm`/`kubectl` — the only coverage for branches
-   `dry-run` never reaches
+   `run:` body and execute it against stubbed tools (for example `helm`, `kubectl` or `uv`) — the
+   only coverage for branches `dry-run` never reaches
 6. **validate-doc-pins:** Confirms every `workflows/<file>.yml@<ref>` pin in the docs resolves at that
    ref, so a consumer copying an example never gets a broken `uses:`
 7. **ci-complete:** Consolidated status gate over the jobs above (markdown is warning-only)
@@ -560,7 +603,7 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  .github/workflows/ci.yml                                          │
-│    uses: .../{go,go-base,node,rust}.yml@v1.x                      │
+│    uses: .../{go,go-base,node,python,rust}.yml@v1.x               │
 │                                                                     │
 │  .github/workflows/cd.yml                                          │
 │    build:  uses: .../docker-build-push.yml@v1.x                    │
@@ -580,7 +623,7 @@ if: ${{ github.event.workflow_run.conclusion == 'success' }}
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  Reusable Workflows:                                                │
-│    go-base.yml, go.yml, node.yml, rust.yml,                         │
+│    go-base.yml, go.yml, node.yml, python.yml, rust.yml,             │
 │    docker-build-push.yml, k8s-deploy.yml,                           │
 │    k8s-canary.yml, k8s-bluegreen.yml, release.yml                   │
 │                                                                     │
@@ -716,9 +759,9 @@ helm template charts/app --set image.repository=test --set image.tag=test
 npx semantic-release --dry-run
 ```
 
-`test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`, `rust.yml`,
+`test.yml` (`workflow_dispatch`) exercises `go.yml`, `release.yml`, `node.yml`, `python.yml`, `rust.yml`,
 `docker-build-push.yml` (build-only), `k8s-deploy.yml` (`helm template` dry-run), `k8s-canary.yml`
-and `k8s-bluegreen.yml` (dry-run per action) against this repo without needing real Go/Node/Rust
+and `k8s-bluegreen.yml` (dry-run per action) against this repo without needing real Go/Node/Python/Rust
 projects, a registry, or a cluster. The docker and k8s smoke jobs pass an
 explicit `ref: ${{ github.sha }}`; docker has a follow-up job asserting `outputs.short-sha` matches
 that ref. `adopt-existing` is **not** covered by `test.yml` — it is skipped under `dry-run` and needs
@@ -737,6 +780,8 @@ a disposable cluster/namespace for a real run (validate manually when changing i
 1. **Caching:**
    - Go modules cached with `actions/cache`
    - `node.yml` uses `actions/setup-node`'s native package-manager cache
+   - `python.yml` uses `astral-sh/setup-uv`'s dependency cache, keyed by the selected project's
+     `pyproject.toml` and `uv.lock`
    - `rust.yml` uses `actions-rust-lang/setup-rust-toolchain`'s built-in cargo cache
    - Node modules cached in release workflow
 

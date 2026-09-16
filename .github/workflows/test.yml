@@ -28,6 +28,11 @@ on:
         description: 'Test node.yml (this repo has no Node project, so build/lint/typecheck/test are skipped)'
         type: boolean
         default: false
+      run-python:
+        description: >-
+          Test python.yml (this repo has no Python project, so format/lint/typecheck/build/test are skipped)
+        type: boolean
+        default: false
       run-rust:
         description: 'Test rust.yml (this repo has no Rust project, so fmt/clippy/build/test are skipped)'
         type: boolean
@@ -80,6 +85,17 @@ jobs:
       run-lint: false
       run-typecheck: false
       run-tests: false  # This repo has no Node project; validates workflow plumbing only
+
+  test-python-workflow:
+    if: ${{ github.event.inputs.run-python == 'true' }}
+    uses: ./.github/workflows/python.yml
+    with:
+      python-version: '3.12'
+      run-format: false
+      run-lint: false
+      run-typecheck: false
+      run-build: false
+      run-tests: false  # This repo has no Python project; validates workflow plumbing only
 
   test-rust-workflow:
     if: ${{ github.event.inputs.run-rust == 'true' }}
