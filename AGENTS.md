@@ -144,6 +144,7 @@ bash tests/ingress-host-composition.sh
 bash tests/bluegreen-slot-flip.sh
 bash tests/k8s-job-run.sh
 bash tests/k8s-context-isolation.sh
+bash tests/no-inline-run-expressions.sh
 bash tests/release-rules.sh
 
 # 6. Release dry-run (optional; needs GITHUB_TOKEN)
@@ -238,12 +239,15 @@ Every reusable workflow MUST:
 5. Pin third-party action versions (`@v4`, not `@latest`/`@master`) and pin any ad-hoc installed package
    majors (see `release.yml`'s `npm install -g` of `semantic-release@^25` etc.).
 6. Never log secrets; require them to be passed explicitly via `secrets:`.
-7. Never interpolate `${{ }}` inside a `run:` block. Map values through a job- or step-level `env:`
-   entry and reference the environment variable from the script, so caller-controlled values cannot
-   change the script before the shell parses it.
 
 Internal workflows (`ci.yml`, `auto-release.yml`, `test.yml`) are exempt from the reusable rules — they
 govern this repo only and are not meant to be called by others.
+
+### Script expression isolation (all workflows)
+
+Never interpolate `${{ }}` inside a `run:` block, including in internal workflows. Map values through a
+job- or step-level `env:` entry and reference the environment variable from the script, so values cannot
+change the script before the shell parses it. `tests/no-inline-run-expressions.sh` enforces this rule.
 
 ## 7. Change classification (breaking vs non-breaking)
 
@@ -325,6 +329,8 @@ Before considering a change complete:
       shell in a `run:` block that `dry-run` can't reach, it's covered by a `tests/` script.
 - [ ] `bash tests/action-node24-versions.sh` passes so JavaScript actions cannot regress to a
       Node.js 20 runtime.
+- [ ] `bash tests/no-inline-run-expressions.sh` passes so expressions cannot be interpolated into
+      workflow shell scripts.
 - [ ] `bash tests/release-rules.sh` passes when `.releaserc.json` or `.releaserc.json.example`
       changed, so a breaking change still releases a major.
 - [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.
