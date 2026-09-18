@@ -7,6 +7,7 @@ cd "${REPO_ROOT}"
 
 python3 <<'PY'
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -47,19 +48,27 @@ for command in (
 
 package = json.loads(Path("tools/release/package.json").read_text(encoding="utf-8"))
 lock = json.loads(Path("tools/release/package-lock.json").read_text(encoding="utf-8"))
-expected_versions = {
-    "semantic-release": "25.0.9",
-    "@semantic-release/git": "10.0.1",
-    "@semantic-release/changelog": "6.0.3",
-    "conventional-changelog-conventionalcommits": "9.3.1",
+expected_packages = {
+    "semantic-release",
+    "@semantic-release/git",
+    "@semantic-release/changelog",
+    "conventional-changelog-conventionalcommits",
 }
-if package.get("dependencies") != expected_versions:
-    raise SystemExit("release package.json dependencies must use exact approved versions")
+dependencies = package.get("dependencies")
+if set(dependencies or ()) != expected_packages:
+    raise SystemExit("release package.json must retain the expected direct dependencies")
+for name, version in dependencies.items():
+    if not isinstance(version, str) or not re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+(?:-[0-9A-Za-z.-]+)?", version):
+        raise SystemExit("%s must use an exact version, not a range: %r" % (name, version))
 if lock.get("lockfileVersion") != 3:
     raise SystemExit("release toolchain must use a lockfileVersion 3 lockfile")
 root = lock.get("packages", {}).get("", {})
-if root.get("dependencies") != expected_versions:
+if root.get("dependencies") != dependencies:
     raise SystemExit("release package-lock root dependencies must match package.json")
+for name, version in dependencies.items():
+    locked = lock["packages"].get("node_modules/" + name, {}).get("version")
+    if locked != version:
+        raise SystemExit("package-lock must resolve %s to its exact manifest version" % name)
 
 dependabot = yaml.safe_load(Path(".github/dependabot.yml").read_text(encoding="utf-8"))
 if not any(
