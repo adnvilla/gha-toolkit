@@ -50,31 +50,31 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
+      # A reusable workflow runs in the caller's repository. Check out the toolkit
+      # at the exact commit that supplied this workflow so its lockfile remains
+      # coupled to the workflow implementation, including when a fork is used.
+      - name: Checkout locked release toolchain
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .gha-toolkit-release
+
       - name: Install semantic-release
+        env:
+          RELEASE_TOOLS_DIR: ${{ github.workspace }}/.gha-toolkit-release/tools/release
         run: |
-          # Pin majors so a breaking upstream release cannot silently break
-          # every consumer's release pipeline. Bump deliberately when ready.
-          # @semantic-release/exec is intentionally omitted — not used by
-          # .releaserc.json (or the consumer .releaserc.json.example).
-          #
-          # The conventionalcommits preset stays on ^9: with the
-          # @semantic-release/release-notes-generator@^14 that semantic-release@^25
-          # depends on, ^10 renders every section empty, so releases still get the
-          # right version bump but ship blank notes and a blank CHANGELOG entry.
-          # Verify with a real commit before raising it.
-          npm install -g \
-            semantic-release@^25 \
-            @semantic-release/git@^10 \
-            @semantic-release/changelog@^6 \
-            conventional-changelog-conventionalcommits@^9
+          npm ci --ignore-scripts --prefix "${RELEASE_TOOLS_DIR}"
+          npm ls --omit=dev --depth=0 --prefix "${RELEASE_TOOLS_DIR}"
 
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
           DRY_RUN: ${{ inputs.dry-run }}
+          RELEASE_TOOLS_DIR: ${{ github.workspace }}/.gha-toolkit-release/tools/release
         run: |
           if [ "${DRY_RUN}" == "true" ]; then
-            npx semantic-release --dry-run
+            npx --prefix "${RELEASE_TOOLS_DIR}" --no-install semantic-release --dry-run
           else
-            npx semantic-release
+            npx --prefix "${RELEASE_TOOLS_DIR}" --no-install semantic-release
           fi
