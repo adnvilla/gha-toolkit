@@ -102,6 +102,8 @@ Located in `.github/workflows/`, one file per domain:
    private network — e.g. `k8s-deploy.yml` defaults to `self-hosted`), so consumers can choose the runner
 4. Include usage examples in documentation
 5. Be generic (not specific to one project)
+6. Pin third-party actions to a full commit SHA and retain the reviewed version tag in a comment;
+   Dependabot updates these pins weekly.
 
 ### Internal Workflows
 
@@ -134,7 +136,7 @@ jobs:
   my-job:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Do something
         run: echo "Using ${{ inputs.my-param }}"
 ```
