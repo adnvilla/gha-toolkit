@@ -145,6 +145,7 @@ bash tests/bluegreen-slot-flip.sh
 bash tests/k8s-job-run.sh
 bash tests/k8s-context-isolation.sh
 bash tests/no-inline-run-expressions.sh
+bash tests/workflow-timeouts.sh
 bash tests/release-rules.sh
 
 # 6. Release dry-run (optional; needs GITHUB_TOKEN)
@@ -341,6 +342,8 @@ Before considering a change complete:
       Node.js 20 runtime.
 - [ ] `bash tests/no-inline-run-expressions.sh` passes so expressions cannot be interpolated into
       workflow shell scripts.
+- [ ] `bash tests/workflow-timeouts.sh` passes so every job remains bounded and reusable workflows
+      expose their timeout input.
 - [ ] `bash tests/release-rules.sh` passes when `.releaserc.json` or `.releaserc.json.example`
       changed, so a breaking change still releases a major.
 - [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.

@@ -160,7 +160,7 @@ on:
           Maximum workflow duration in minutes, including setup and the Job wait period.
         required: false
         type: number
-        default: 30
+        default: 35
     outputs:
       action:
         description: 'Action that was executed'

@@ -736,6 +736,8 @@ jobs:
         --to=2026-02-01
       cronjob-name: cleanup      # used by the trigger/suspend/resume actions
       timeout-seconds: 1800
+      # Keep the workflow limit above the wait time to preserve failure diagnostics.
+      timeout-minutes: 35
       runs-on: self-hosted
 ```
 

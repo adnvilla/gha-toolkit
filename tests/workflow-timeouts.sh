@@ -33,7 +33,7 @@ reusable_defaults = {
     "k8s-bluegreen.yml": 30,
     "k8s-canary.yml": 20,
     "k8s-deploy.yml": 20,
-    "k8s-job.yml": 30,
+    "k8s-job.yml": 35,
     "node.yml": 30,
     "python.yml": 30,
     "release.yml": 15,

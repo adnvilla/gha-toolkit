@@ -15,7 +15,7 @@ The toolkit follows a **two-tier architecture**:
 
 Every reusable workflow accepts an optional numeric `timeout-minutes` input. Its default reflects the
 workload: 30 minutes for language CI and image builds, 15 for releases, 20 for rolling/canary Kubernetes
-deployments, and 30 for blue/green and batch jobs. The limit bounds the whole job, including network
+deployments, 30 for blue/green, and 35 for batch jobs. The limit bounds the whole job, including network
 operations outside Helm's own rollout timeout. Consumers can raise it deliberately when their workload
 needs more time. Introducing these defaults changes the prior implicit GitHub limit of 360 minutes, so it
 is released as a breaking change; set the input explicitly before upgrading if a workload needs longer.
