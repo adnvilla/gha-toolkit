@@ -33,7 +33,7 @@ while IFS= read -r reference; do
     echo "::error::mutable or undocumented external action reference: ${reference}"
     FAILURES=$((FAILURES + 1))
   fi
-done < <(grep -rhE 'uses:[[:space:]]*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[^[:space:]]+' .github/workflows | grep -v 'uses: \./' || true)
+done < <(grep -rhE 'uses:[[:space:]]*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*@[^[:space:]]+' .github/workflows | grep -v 'uses: \./' || true)
 
 check_minimum_major "actions/checkout" 5
 check_minimum_major "actions/setup-go" 6
