@@ -56,6 +56,8 @@ on:
 jobs:
   build:
     runs-on: ${{ inputs.runs-on }}
+    env:
+      PACKAGE_MANAGER: ${{ inputs.package-manager }}
     steps:
       - uses: actions/checkout@v7
 
@@ -107,9 +109,9 @@ jobs:
       - name: Build
         if: ${{ inputs.run-build }}
         run: |
-          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+          if [ "${PACKAGE_MANAGER}" == "pnpm" ]; then
             pnpm -r run build
-          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+          elif [ "${PACKAGE_MANAGER}" == "npm" ]; then
             npm run build --workspaces --if-present
           else
             yarn workspaces run build
@@ -118,9 +120,9 @@ jobs:
       - name: Lint
         if: ${{ inputs.run-lint }}
         run: |
-          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+          if [ "${PACKAGE_MANAGER}" == "pnpm" ]; then
             pnpm -r run lint
-          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+          elif [ "${PACKAGE_MANAGER}" == "npm" ]; then
             npm run lint --workspaces --if-present
           else
             yarn workspaces run lint
@@ -129,9 +131,9 @@ jobs:
       - name: Typecheck
         if: ${{ inputs.run-typecheck }}
         run: |
-          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+          if [ "${PACKAGE_MANAGER}" == "pnpm" ]; then
             pnpm -r run typecheck
-          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+          elif [ "${PACKAGE_MANAGER}" == "npm" ]; then
             npm run typecheck --workspaces --if-present
           else
             yarn workspaces run typecheck
@@ -140,9 +142,9 @@ jobs:
       - name: Test
         if: ${{ inputs.run-tests }}
         run: |
-          if [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+          if [ "${PACKAGE_MANAGER}" == "pnpm" ]; then
             pnpm -r run test
-          elif [ "${{ inputs.package-manager }}" == "npm" ]; then
+          elif [ "${PACKAGE_MANAGER}" == "npm" ]; then
             npm run test --workspaces --if-present
           else
             yarn workspaces run test

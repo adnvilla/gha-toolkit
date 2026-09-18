@@ -238,6 +238,9 @@ Every reusable workflow MUST:
 5. Pin third-party action versions (`@v4`, not `@latest`/`@master`) and pin any ad-hoc installed package
    majors (see `release.yml`'s `npm install -g` of `semantic-release@^25` etc.).
 6. Never log secrets; require them to be passed explicitly via `secrets:`.
+7. Never interpolate `${{ }}` inside a `run:` block. Map values through a job- or step-level `env:`
+   entry and reference the environment variable from the script, so caller-controlled values cannot
+   change the script before the shell parses it.
 
 Internal workflows (`ci.yml`, `auto-release.yml`, `test.yml`) are exempt from the reusable rules — they
 govern this repo only and are not meant to be called by others.

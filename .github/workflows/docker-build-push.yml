@@ -99,9 +99,12 @@ jobs:
 
       - name: Compute tags
         id: tags
+        env:
+          REGISTRY_HOST: ${{ inputs.registry-host }}
+          IMAGE_NAME: ${{ inputs.image-name }}
         run: |
           SHORT_SHA="$(git rev-parse --short=7 HEAD)"
-          IMAGE="${{ inputs.registry-host }}/${{ inputs.image-name }}"
+          IMAGE="${REGISTRY_HOST}/${IMAGE_NAME}"
           {
             echo "image=${IMAGE}:${SHORT_SHA}"
             echo "short-sha=${SHORT_SHA}"
@@ -109,8 +112,9 @@ jobs:
 
       - name: Verify Docker daemon insecure-registries and registry connectivity
         if: ${{ inputs.verify-insecure-registry && inputs.push }}
+        env:
+          REGISTRY_HOST: ${{ inputs.registry-host }}
         run: |
-          REGISTRY_HOST="${{ inputs.registry-host }}"
           if ! docker info 2>/dev/null | grep -q "${REGISTRY_HOST}"; then
             echo "::error::${REGISTRY_HOST} is not in Docker daemon insecure-registries."
             exit 1

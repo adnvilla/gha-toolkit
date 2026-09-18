@@ -160,6 +160,7 @@ jobs:
       - name: Validate action
         env:
           ACTION: ${{ inputs.action }}
+          IMAGE: ${{ inputs.image }}
         run: |
           case "${ACTION}" in
             deploy|promote|abort) ;;
@@ -168,7 +169,7 @@ jobs:
               exit 1
               ;;
           esac
-          if [ "${ACTION}" != "abort" ] && [ -z "${{ inputs.image }}" ]; then
+          if [ "${ACTION}" != "abort" ] && [ -z "${IMAGE}" ]; then
             echo "::error::image is required for action=${ACTION}"
             exit 1
           fi

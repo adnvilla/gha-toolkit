@@ -215,6 +215,7 @@ jobs:
         env:
           ACTION: ${{ inputs.action }}
           ACTIVE_SLOT_INPUT: ${{ inputs.active-slot }}
+          IMAGE: ${{ inputs.image }}
         run: |
           case "${ACTION}" in
             deploy|promote|abort|status) ;;
@@ -224,7 +225,7 @@ jobs:
               ;;
           esac
           if { [ "${ACTION}" = "deploy" ] || [ "${ACTION}" = "promote" ]; } \
-            && [ -z "${{ inputs.image }}" ]; then
+            && [ -z "${IMAGE}" ]; then
             echo "::error::image is required for action=${ACTION}"
             exit 1
           fi
