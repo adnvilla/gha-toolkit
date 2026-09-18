@@ -1,3 +1,22 @@
+## [2.0.0](https://github.com/adnvilla/gha-toolkit/compare/v1.9.3...v2.0.0) (2026-09-18)
+
+### ⚠ BREAKING CHANGES
+
+* reusable workflows now cancel after their documented timeout-minutes default instead of GitHub Actions implicit 360-minute job limit.
+
+### 🚀 Features
+
+* bound workflow execution time ([19e42f7](https://github.com/adnvilla/gha-toolkit/commit/19e42f7555366231d5a2f2dbe68df61a7e67d4bc))
+* classify workflow timeout defaults as breaking ([7ce28ce](https://github.com/adnvilla/gha-toolkit/commit/7ce28ce04c7bf549ef581c3f27af94be8f98dfca))
+
+### 🐛 Bug Fixes
+
+* preserve k8s job timeout diagnostics ([489fe05](https://github.com/adnvilla/gha-toolkit/commit/489fe050749b00e2ac4bd2f96405d04edf040a7b))
+
+### 📚 Documentation
+
+* enforce reusable workflow timeout contract ([6acfc8f](https://github.com/adnvilla/gha-toolkit/commit/6acfc8fdc5bf20ef7ca09da39e1ac1a46735abca))
+
 ## [1.9.3](https://github.com/adnvilla/gha-toolkit/compare/v1.9.2...v1.9.3) (2026-09-18)
 
 ### 🐛 Bug Fixes
