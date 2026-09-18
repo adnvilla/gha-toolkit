@@ -58,6 +58,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   test-go-workflow:
     if: ${{ github.event.inputs.run-go == 'true' }}
@@ -69,8 +72,6 @@ jobs:
   test-release-workflow:
     if: ${{ github.event.inputs.run-release == 'true' }}
     uses: ./.github/workflows/release.yml
-    permissions:
-      contents: write
     with:
       dry-run: true  # Always in dry-run for this repo
     secrets:
