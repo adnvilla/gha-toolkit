@@ -73,6 +73,10 @@ for raw_path in sys.argv[1:]:
             timeout = job.get("timeout-minutes")
             if timeout is None:
                 failures.append(f"{path}:{job_name}: missing timeout-minutes")
+            elif reusable and timeout != "${{ inputs.timeout-minutes }}":
+                failures.append(
+                    f"{path}:{job_name}: reusable job must consume ${{{{ inputs.timeout-minutes }}}}"
+                )
             elif isinstance(timeout, int) and timeout <= 0:
                 failures.append(f"{path}:{job_name}: timeout-minutes must be positive")
 

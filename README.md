@@ -52,6 +52,21 @@ Existing tags, including the historical `v1` alias, are not moved automatically.
 consumer's rollout explicit and reproducible. When upgrading from an older release, review the release
 notes and confirm that self-hosted runners meet the requirements of the actions used by that release.
 
+## ⏱️ Workflow timeouts
+
+Every reusable workflow exposes a numeric `timeout-minutes` input. Its defaults limit stalled jobs to
+15 minutes for releases, 20 for rolling/canary Kubernetes deployments, 30 for language CI, image builds
+and blue/green deployments, and 35 for batch Jobs. Set it explicitly when a measured workload needs more
+time:
+
+```yaml
+with:
+  timeout-minutes: 45
+```
+
+This is a breaking upgrade from versions that relied on GitHub Actions' implicit 360-minute job limit.
+Before upgrading, set a longer value explicitly for any existing job that can exceed its new default.
+
 ## 📋 Available Workflows
 
 ### 1. Go Build and Test — no external services (`go-base.yml`)
