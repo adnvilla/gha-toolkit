@@ -214,13 +214,13 @@ jobs:
 
       - name: Checkout
         if: ${{ inputs.action == 'run' }}
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref }}
 
       - name: Checkout gha-toolkit chart
         if: ${{ inputs.action == 'run' && !inputs.use-local-chart }}
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ inputs.toolkit-ref || job.workflow_sha }}
@@ -228,7 +228,7 @@ jobs:
 
       - name: Setup Helm
         if: ${{ inputs.action == 'run' }}
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: ${{ inputs.helm-version }}
 

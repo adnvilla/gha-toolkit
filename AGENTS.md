@@ -237,8 +237,9 @@ Every reusable workflow MUST:
 4. Stay **generic** — never hardcode a single project's names, hosts, org, or paths. Even the
    `gha-toolkit` repo/ref is resolved dynamically (`job.workflow_repository` / `job.workflow_sha`) so a
    fork works unmodified.
-5. Pin third-party action versions (`@v4`, not `@latest`/`@master`) and pin any ad-hoc installed package
-   majors (see `release.yml`'s `npm install -g` of `semantic-release@^25` etc.).
+5. Pin third-party actions to their full 40-character commit SHA, followed by the version tag in a
+   comment (for example `actions/checkout@<sha> # v7`); Dependabot maintains those pins. Pin ad-hoc
+   installed package majors too (see `release.yml`'s `npm install -g` of `semantic-release@^25` etc.).
 6. Never log secrets; require them to be passed explicitly via `secrets:`.
 7. Declare workflow-level `permissions:` explicitly, granting only the scopes each workflow uses.
    Reusable workflows can reduce caller permissions but never elevate them; use `contents: read`

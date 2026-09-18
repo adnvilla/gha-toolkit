@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prevent known JavaScript actions from regressing to releases that embed Node.js 20 or older.
+# Prevent mutable action refs and known JavaScript actions from regressing to releases that embed Node.js 20 or older.
 #
 # This check is intentionally deterministic: resolving remote action manifests during CI would make
 # validation depend on GitHub API availability and rate limits. Update the minimum major here when a
@@ -19,13 +19,21 @@ check_minimum_major() {
 
   while IFS= read -r match; do
     [ -z "${match}" ] && continue
-    version="${match##*@v}"
+    version="${match##*# v}"
     if [ "${version}" -lt "${minimum}" ]; then
       echo "::error::${match} embeds Node.js 20 or older; use ${action}@v${minimum} or newer"
       FAILURES=$((FAILURES + 1))
     fi
-  done < <(grep -rhoE "uses:[[:space:]]*${action}@v[0-9]+" .github/workflows || true)
+  done < <(grep -rhoE "uses:[[:space:]]*${action}@[a-f0-9]{40}[[:space:]]*#[[:space:]]*v[0-9]+" .github/workflows || true)
 }
+
+while IFS= read -r reference; do
+  [ -z "${reference}" ] && continue
+  if ! [[ "${reference}" =~ @[a-f0-9]{40}[[:space:]]*#[[:space:]]*v ]]; then
+    echo "::error::mutable or undocumented external action reference: ${reference}"
+    FAILURES=$((FAILURES + 1))
+  fi
+done < <(grep -rhE 'uses:[[:space:]]*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[^[:space:]]+' .github/workflows | grep -v 'uses: \./' || true)
 
 check_minimum_major "actions/checkout" 5
 check_minimum_major "actions/setup-go" 6
@@ -40,4 +48,4 @@ if [ "${FAILURES}" -ne 0 ]; then
   exit 1
 fi
 
-echo "All tracked JavaScript actions use Node.js 24-compatible releases"
+echo "All external actions are SHA-pinned and tracked JavaScript actions use Node.js 24-compatible releases"
