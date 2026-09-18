@@ -171,22 +171,24 @@ jobs:
         with:
           version: ${{ inputs.helm-version }}
 
-      - name: Select kube context
+      - name: Verify kube context
         if: ${{ !inputs.dry-run }}
+        env:
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
-          kubectl config use-context "${{ inputs.kube-context }}"
-          kubectl cluster-info
+          kubectl --context "${KUBE_CONTEXT}" cluster-info
 
       - name: Adopt existing resources
         if: ${{ inputs.adopt-existing && !inputs.dry-run }}
         env:
           RELEASE_NAME: ${{ inputs.release-name }}
           NAMESPACE: ${{ inputs.namespace }}
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
           for kind in deployment service ingress; do
-            if kubectl get "$kind" "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+            if kubectl --context "${KUBE_CONTEXT}" get "$kind" "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
               echo "Deleting pre-existing ${kind}/${RELEASE_NAME} in ${NAMESPACE} so Helm can recreate it"
-              kubectl delete "$kind" "$RELEASE_NAME" -n "$NAMESPACE"
+              kubectl --context "${KUBE_CONTEXT}" delete "$kind" "$RELEASE_NAME" -n "$NAMESPACE"
             fi
           done
 
@@ -206,6 +208,7 @@ jobs:
           ATOMIC: ${{ inputs.atomic }}
           TIMEOUT: ${{ inputs.timeout }}
           DRY_RUN: ${{ inputs.dry-run }}
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
           if [ "${USE_LOCAL_CHART}" == "true" ]; then
             CHART_DIR="${CHART_PATH}"
@@ -277,6 +280,7 @@ jobs:
               "${RENDER_ARGS[@]}"
               --create-namespace
               --timeout "${TIMEOUT}"
+              --kube-context "${KUBE_CONTEXT}"
             )
             [ "${WAIT}" == "true" ] && ARGS+=(--wait)
             [ "${ATOMIC}" == "true" ] && ARGS+=(--atomic)

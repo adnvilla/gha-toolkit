@@ -39,6 +39,7 @@ STUB_DIR="${WORK_DIR}/bin"
 mkdir -p "${STUB_DIR}"
 cat > "${STUB_DIR}/helm" <<'STUB'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> "${HELM_CALLS_FILE}"
 case "$1" in
   status)
     [ "${FAKE_RELEASE_EXISTS}" == "true" ] || exit 1
@@ -56,6 +57,22 @@ case "$1" in
 esac
 STUB
 chmod +x "${STUB_DIR}/helm"
+
+cat > "${STUB_DIR}/kubectl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${KUBECTL_CALLS_FILE}"
+if [ "$1" = "--context" ]; then
+  shift 2
+fi
+case "$1" in
+  get) ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 64
+    ;;
+esac
+STUB
+chmod +x "${STUB_DIR}/kubectl"
 
 VALUES_WITH_IMAGES="${WORK_DIR}/values-with-images.json"
 cat > "${VALUES_WITH_IMAGES}" <<'JSON'
@@ -77,6 +94,8 @@ VALUES_WITHOUT_IMAGE="${WORK_DIR}/values-without-image.json"
 echo '{"replicaCount": 2}' > "${VALUES_WITHOUT_IMAGE}"
 
 HELM_ARGS_FILE="${WORK_DIR}/helm-args.txt"
+HELM_CALLS_FILE="${WORK_DIR}/helm-calls.txt"
+KUBECTL_CALLS_FILE="${WORK_DIR}/kubectl-calls.txt"
 STEP_OUTPUT="${WORK_DIR}/step-output.txt"
 STEP_LOG="${WORK_DIR}/step.log"
 
@@ -105,11 +124,15 @@ end_case() {
 # FAKE_RELEASE_EXISTS / FAKE_VALUES_FILE beforehand.
 run_step() {
   : > "${HELM_ARGS_FILE}"
+  : > "${HELM_CALLS_FILE}"
+  : > "${KUBECTL_CALLS_FILE}"
   : > "${STEP_OUTPUT}"
   set +e
   env \
     PATH="${STUB_DIR}:${PATH}" \
     HELM_ARGS_FILE="${HELM_ARGS_FILE}" \
+    HELM_CALLS_FILE="${HELM_CALLS_FILE}" \
+    KUBECTL_CALLS_FILE="${KUBECTL_CALLS_FILE}" \
     FAKE_RELEASE_EXISTS="${FAKE_RELEASE_EXISTS}" \
     FAKE_VALUES_FILE="${FAKE_VALUES_FILE}" \
     GITHUB_OUTPUT="${STEP_OUTPUT}" \
@@ -124,10 +147,11 @@ run_step() {
     CANARY_WEIGHT=10 \
     CANARY_REPLICAS=1 \
     HELM_SET="" \
-    WAIT=false \
+    WAIT="${WAIT}" \
     ATOMIC=false \
     TIMEOUT=180s \
     DRY_RUN=false \
+    KUBE_CONTEXT=test-context \
     bash "${STEP_SCRIPT}" > "${STEP_LOG}" 2>&1
   STEP_STATUS=$?
   set -e
@@ -137,6 +161,16 @@ expect_success() {
   [ "${STEP_STATUS}" -eq 0 ] || fail "step exited ${STEP_STATUS}, expected 0"
   ! grep -q 'Traceback (most recent call last)' "${STEP_LOG}" \
     || fail "step printed a Python traceback"
+  while IFS= read -r call; do
+    [ -z "${call}" ] && continue
+    [[ "${call}" == *"--kube-context test-context"* ]] \
+      || fail "helm call did not select test-context: ${call}"
+  done < "${HELM_CALLS_FILE}"
+  while IFS= read -r call; do
+    [ -z "${call}" ] && continue
+    [[ "${call}" == "--context test-context "* ]] \
+      || fail "kubectl call did not select test-context: ${call}"
+  done < "${KUBECTL_CALLS_FILE}"
 }
 
 # helm receives `--set` and `KEY=VALUE` as separate argv entries, one per recorded line.
@@ -148,11 +182,16 @@ expect_step_output() {
   grep -Fxq "$1" "${STEP_OUTPUT}" || fail "missing step output '$1'"
 }
 
+expect_kubectl_call() {
+  grep -Fq -- "$1" "${KUBECTL_CALLS_FILE}" || fail "missing kubectl call matching '$1'"
+}
+
 begin_case "deploy resolves the stable image from the current release"
 ACTION=deploy
 IMAGE=registry.example.com/service:canary-sha
 STABLE_IMAGE_INPUT=""
 FAKE_RELEASE_EXISTS=true
+WAIT=false
 FAKE_VALUES_FILE="${VALUES_WITH_IMAGES}"
 run_step
 expect_success
@@ -211,6 +250,19 @@ FAKE_VALUES_FILE="${VALUES_WITHOUT_IMAGE}"
 run_step
 expect_success
 expect_helm_set "image.tag=new-sha"
+end_case
+
+begin_case "the canary rollout lookup uses the explicit kube context"
+ACTION=deploy
+IMAGE=registry.example.com/service:new-sha
+STABLE_IMAGE_INPUT=""
+FAKE_RELEASE_EXISTS=true
+FAKE_VALUES_FILE="${VALUES_WITH_IMAGES}"
+WAIT=true
+run_step
+expect_success
+expect_kubectl_call "--context test-context get deploy"
+WAIT=false
 end_case
 
 if [ "${FAILURES}" -ne 0 ]; then

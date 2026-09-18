@@ -51,6 +51,7 @@ tests/                   # Shell-logic tests: extract a workflow step's `run:` b
   ingress-host-composition.sh # prefix + INGRESS_BASE_DOMAIN host compose / non-clobber
   bluegreen-slot-flip.sh      # k8s-bluegreen.yml slot flip, status, preview and verify/auto-abort
   k8s-job-run.sh              # k8s-job.yml render/wait/CronJob logic (all non-dry-run)
+  k8s-context-isolation.sh    # explicit Kubernetes context / no shared-kubeconfig mutation guard
   action-node24-versions.sh   # rejects action releases that still embed Node.js 20
   release-rules.sh            # releaseRules must release breaking changes as major
 .releaserc.json          # THIS repo's semantic-release config — SOURCE OF TRUTH for release rules
@@ -142,6 +143,7 @@ bash tests/k8s-image-references.sh
 bash tests/ingress-host-composition.sh
 bash tests/bluegreen-slot-flip.sh
 bash tests/k8s-job-run.sh
+bash tests/k8s-context-isolation.sh
 bash tests/release-rules.sh
 
 # 6. Release dry-run (optional; needs GITHUB_TOKEN)
@@ -172,6 +174,8 @@ Rules when adding to them:
   whole reason these exist.
 - Each script takes an optional workflow path argument, so you can point it at an older revision
   (`git show HEAD:<path> > /tmp/x.yml`) to confirm a new test actually fails before your fix.
+  `k8s-context-isolation.sh` covers four workflows, so it accepts either no arguments or those four
+  workflow paths in this order: deploy, canary, bluegreen, job.
 - The scripts themselves are linted by `shellcheck` in `validate-actions` (actionlint only reads `run:`
   blocks, never standalone `.sh` files), so keep them warning-free.
 

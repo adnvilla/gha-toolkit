@@ -191,11 +191,12 @@ jobs:
         with:
           version: ${{ inputs.helm-version }}
 
-      - name: Select kube context
+      - name: Verify kube context
         if: ${{ !inputs.dry-run }}
+        env:
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
-          kubectl config use-context "${{ inputs.kube-context }}"
-          kubectl cluster-info
+          kubectl --context "${KUBE_CONTEXT}" cluster-info
 
       - name: Deploy canary phase
         id: deploy
@@ -217,6 +218,7 @@ jobs:
           ATOMIC: ${{ inputs.atomic }}
           TIMEOUT: ${{ inputs.timeout }}
           DRY_RUN: ${{ inputs.dry-run }}
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
           set -euo pipefail
 
@@ -231,8 +233,8 @@ jobs:
               echo "{}"
               return
             fi
-            if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
-              helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json
+            if helm status "${RELEASE_NAME}" -n "${NAMESPACE}" --kube-context "${KUBE_CONTEXT}" >/dev/null 2>&1; then
+              helm get values "${RELEASE_NAME}" -n "${NAMESPACE}" -a -o json --kube-context "${KUBE_CONTEXT}"
             else
               echo "{}"
             fi
@@ -373,17 +375,18 @@ jobs:
               "${RENDER_ARGS[@]}"
               --create-namespace
               --timeout "${TIMEOUT}"
+              --kube-context "${KUBE_CONTEXT}"
             )
             [ "${WAIT}" == "true" ] && ARGS+=(--wait)
             [ "${ATOMIC}" == "true" ] && ARGS+=(--atomic)
             helm "${ARGS[@]}"
 
             if [ "${WAIT}" == "true" ] && [ "${ACTION}" == "deploy" ]; then
-              kubectl get deploy -n "${NAMESPACE}" \
+              kubectl --context "${KUBE_CONTEXT}" get deploy -n "${NAMESPACE}" \
                 -l "app.kubernetes.io/instance=${RELEASE_NAME}-canary,app.kubernetes.io/track=canary" \
                 -o name | while read -r d; do
                   [ -z "$d" ] && continue
-                  kubectl rollout status "$d" -n "${NAMESPACE}" --timeout="${TIMEOUT}"
+                  kubectl --context "${KUBE_CONTEXT}" rollout status "$d" -n "${NAMESPACE}" --timeout="${TIMEOUT}"
                 done
             fi
           fi

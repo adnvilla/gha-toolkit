@@ -256,6 +256,9 @@ jobs:
       - name: Test k8s-job execution
         run: bash tests/k8s-job-run.sh
 
+      - name: Test Kubernetes context isolation
+        run: bash tests/k8s-context-isolation.sh
+
       - name: Test Python workflow commands
         run: bash tests/python-workflow.sh
 

@@ -42,6 +42,7 @@ mkdir -p "${STUB_DIR}"
 # call lands in HELM_ARGS_FILE; HELM_CALLS_FILE counts them (auto-abort applies twice).
 cat > "${STUB_DIR}/helm" <<'STUB'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> "${HELM_COMMANDS_FILE}"
 case "$1" in
   status)
     [ "${FAKE_RELEASE_EXISTS}" == "true" ] || exit 1
@@ -105,6 +106,7 @@ JSON
 
 HELM_ARGS_FILE="${WORK_DIR}/helm-args.txt"
 HELM_CALLS_FILE="${WORK_DIR}/helm-calls.txt"
+HELM_COMMANDS_FILE="${WORK_DIR}/helm-commands.txt"
 STEP_OUTPUT="${WORK_DIR}/step-output.txt"
 STEP_LOG="${WORK_DIR}/step.log"
 
@@ -134,12 +136,14 @@ end_case() {
 run_step() {
   : > "${HELM_ARGS_FILE}"
   : > "${HELM_CALLS_FILE}"
+  : > "${HELM_COMMANDS_FILE}"
   : > "${STEP_OUTPUT}"
   set +e
   env \
     PATH="${STUB_DIR}:${PATH}" \
     HELM_ARGS_FILE="${HELM_ARGS_FILE}" \
     HELM_CALLS_FILE="${HELM_CALLS_FILE}" \
+    HELM_COMMANDS_FILE="${HELM_COMMANDS_FILE}" \
     FAKE_RELEASE_EXISTS=true \
     FAKE_VALUES_FILE="${GREEN_ACTIVE_VALUES}" \
     FAKE_HTTP_STATUS="${FAKE_HTTP_STATUS:-200}" \
@@ -166,6 +170,7 @@ run_step() {
     ATOMIC=false \
     TIMEOUT=180s \
     DRY_RUN=false \
+    KUBE_CONTEXT=test-context \
     bash "${STEP_SCRIPT}" > "${STEP_LOG}" 2>&1
   STEP_STATUS=$?
   set -e
@@ -185,10 +190,20 @@ expect_success() {
   [ "${STEP_STATUS}" -eq 0 ] || fail "step exited ${STEP_STATUS}, expected 0"
   ! grep -q 'Traceback (most recent call last)' "${STEP_LOG}" \
     || fail "step printed a Python traceback"
+  expect_helm_contexts
 }
 
 expect_failure() {
   [ "${STEP_STATUS}" -ne 0 ] || fail "step exited 0, expected a failure"
+  expect_helm_contexts
+}
+
+expect_helm_contexts() {
+  while IFS= read -r call; do
+    [ -z "${call}" ] && continue
+    [[ "${call}" == *"--kube-context test-context"* ]] \
+      || fail "helm call did not select test-context: ${call}"
+  done < "${HELM_COMMANDS_FILE}"
 }
 
 # helm receives `--set` and `KEY=VALUE` as separate argv entries, one per recorded line.
