@@ -9,9 +9,15 @@ set -euo pipefail
 if (( $# == 0 )); then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   WORKFLOW_DIR="$(cd "${SCRIPT_DIR}/../.github/workflows" && pwd)"
-  WORKFLOWS=("${WORKFLOW_DIR}"/*.yml)
+  shopt -s nullglob
+  WORKFLOWS=("${WORKFLOW_DIR}"/*.yml "${WORKFLOW_DIR}"/*.yaml)
 else
   WORKFLOWS=("$@")
+fi
+
+if (( ${#WORKFLOWS[@]} == 0 )); then
+  echo "no workflow files to scan" >&2
+  exit 2
 fi
 
 python3 - "${WORKFLOWS[@]}" <<'PY'
