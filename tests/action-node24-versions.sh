@@ -24,16 +24,18 @@ check_minimum_major() {
       echo "::error::${match} embeds Node.js 20 or older; use ${action}@v${minimum} or newer"
       FAILURES=$((FAILURES + 1))
     fi
-  done < <(grep -rhoE "uses:[[:space:]]*${action}@[a-f0-9]{40}[[:space:]]*#[[:space:]]*v[0-9]+" .github/workflows || true)
+  done < <(grep -rhoE "uses:[[:space:]]*[\"']?${action}@[a-f0-9]{40}[\"']?[[:space:]]*#[[:space:]]*v[0-9]+" .github/workflows || true)
 }
+
+PINNED_REFERENCE_PATTERN="@[a-f0-9]{40}[\"']?[[:space:]]*#[[:space:]]*v"
 
 while IFS= read -r reference; do
   [ -z "${reference}" ] && continue
-  if ! [[ "${reference}" =~ @[a-f0-9]{40}[[:space:]]*#[[:space:]]*v ]]; then
+  if ! [[ "${reference}" =~ ${PINNED_REFERENCE_PATTERN} ]]; then
     echo "::error::mutable or undocumented external action reference: ${reference}"
     FAILURES=$((FAILURES + 1))
   fi
-done < <(grep -rhE 'uses:[[:space:]]*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*@[^[:space:]]+' .github/workflows | grep -v 'uses: \./' || true)
+done < <(grep -rhE "uses:[[:space:]]*[\"']?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*@[^[:space:]\"']+" .github/workflows | grep -v 'uses: \./' || true)
 
 check_minimum_major "actions/checkout" 5
 check_minimum_major "actions/setup-go" 6
