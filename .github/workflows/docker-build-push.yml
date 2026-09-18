@@ -64,6 +64,11 @@ on:
         required: false
         type: string
         default: 'ubuntu-latest'
+      timeout-minutes:
+        description: 'Maximum job duration in minutes'
+        required: false
+        type: number
+        default: 30
     secrets:
       registry-username:
         description: >-
@@ -92,6 +97,7 @@ permissions:
 jobs:
   build:
     runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
       image: ${{ steps.tags.outputs.image }}
       short-sha: ${{ steps.tags.outputs.short-sha }}

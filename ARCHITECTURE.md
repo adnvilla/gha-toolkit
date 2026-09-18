@@ -11,6 +11,14 @@ The toolkit follows a **two-tier architecture**:
 
 ## Reusable Workflows
 
+### Execution time limits
+
+Every reusable workflow accepts an optional numeric `timeout-minutes` input. Its default reflects the
+workload: 30 minutes for language CI and image builds, 15 for releases, 20 for rolling/canary Kubernetes
+deployments, and 30 for blue/green and batch jobs. The limit bounds the whole job, including network
+operations outside Helm's own rollout timeout. Consumers can raise it deliberately when their workload
+needs more time.
+
 ### go-base.yml
 
 **Purpose:** CI pipeline for Go projects/libraries that don't need any external service (no
@@ -27,6 +35,7 @@ on:
 - `run-tests` (boolean): Whether to execute tests (default: true)
 - `test-flags` / `build-flags` (string): Extra flags for `go test`/`go build` (default: `-v`)
 - `runs-on` (string): Runner label (default: `ubuntu-latest`)
+- `timeout-minutes` (number): Maximum job duration (default: `30`)
 
 **Usage Pattern:**
 ```yaml

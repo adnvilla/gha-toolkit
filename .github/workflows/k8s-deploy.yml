@@ -145,6 +145,11 @@ on:
         required: false
         type: string
         default: 'self-hosted'
+      timeout-minutes:
+        description: 'Maximum job duration in minutes'
+        required: false
+        type: number
+        default: 20
 
 permissions:
   contents: read
@@ -152,6 +157,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     environment:
       name: ${{ inputs.environment }}
       url: ${{ inputs.environment-url }}

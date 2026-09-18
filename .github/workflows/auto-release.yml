@@ -19,5 +19,6 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       dry-run: false
+      timeout-minutes: 15
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}

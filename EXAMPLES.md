@@ -2,6 +2,24 @@
 
 This document contains practical examples of how to use the reusable workflows in different scenarios.
 
+## Configuring a workflow timeout
+
+Every reusable workflow accepts `timeout-minutes`. The defaults protect runners from stalled network or
+build operations; raise the value only for a workload with a measured need.
+
+```yaml
+jobs:
+  deploy:
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-deploy.yml@master
+    with:
+      release-name: my-app
+      namespace: production
+      kube-context: production
+      values-file: k8s/values.yaml
+      image: ghcr.io/example/my-app:abc1234
+      timeout-minutes: 40
+```
+
 ## Example 1: Simple Go Project
 
 For a Go project without a database:

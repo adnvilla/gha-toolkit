@@ -243,6 +243,10 @@ Every reusable workflow MUST:
    Reusable workflows can reduce caller permissions but never elevate them; use `contents: read`
    by default, add `packages: write` only for GHCR publishing, and reserve `contents: write` for
    releases that create commits, tags, or releases.
+8. Expose a numeric `timeout-minutes` input with a documented, workload-appropriate default and set
+   every direct job's `timeout-minutes` from it. A job that calls a reusable workflow cannot declare
+   that key itself, so it must pass the input through `with:`. Internal jobs also declare a bounded
+   timeout directly.
 
 Internal workflows (`ci.yml`, `auto-release.yml`, `test.yml`) are exempt from the reusable rules — they
 govern this repo only and are not meant to be called by others.

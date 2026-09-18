@@ -68,6 +68,7 @@ jobs:
     with:
       go-version: '1.24'
       run-tests: false  # This repo doesn't have Go code
+      timeout-minutes: 30
 
   test-release-workflow:
     if: ${{ github.event.inputs.run-release == 'true' }}
@@ -78,6 +79,7 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       dry-run: true  # Always in dry-run for this repo
+      timeout-minutes: 15
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -90,6 +92,7 @@ jobs:
       run-lint: false
       run-typecheck: false
       run-tests: false  # This repo has no Node project; validates workflow plumbing only
+      timeout-minutes: 30
 
   test-python-workflow:
     if: ${{ github.event.inputs.run-python == 'true' }}
@@ -101,6 +104,7 @@ jobs:
       run-typecheck: false
       run-build: false
       run-tests: false  # This repo has no Python project; validates workflow plumbing only
+      timeout-minutes: 30
 
   test-rust-workflow:
     if: ${{ github.event.inputs.run-rust == 'true' }}
@@ -112,6 +116,7 @@ jobs:
       run-build: false
       run-tests: false  # This repo has no Rust project; validates workflow plumbing only
       postgres-enabled: false
+      timeout-minutes: 30
 
   test-docker-build-push-workflow:
     if: ${{ github.event.inputs.run-docker-build-push == 'true' }}
@@ -125,11 +130,13 @@ jobs:
       image-name: gha-toolkit-smoke-test
       registry-host: registry.example.local:5000
       push: false
+      timeout-minutes: 30
 
   verify-docker-build-push-ref:
     needs: test-docker-build-push-workflow
     if: ${{ github.event.inputs.run-docker-build-push == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -159,6 +166,7 @@ jobs:
       image: registry.example.local:5000/smoke-test:latest
       dry-run: true
       environment: 'test'
+      timeout-minutes: 20
       # adopt-existing intentionally omitted — skipped under dry-run and needs a
       # real cluster when enabled; see file header.
 
@@ -179,6 +187,7 @@ jobs:
       dry-run: true
       environment: 'test'
       runs-on: ubuntu-latest
+      timeout-minutes: 20
 
   test-k8s-canary-promote:
     if: ${{ github.event.inputs.run-k8s-canary == 'true' }}
@@ -195,6 +204,7 @@ jobs:
       dry-run: true
       environment: 'test'
       runs-on: ubuntu-latest
+      timeout-minutes: 20
 
   test-k8s-canary-abort:
     if: ${{ github.event.inputs.run-k8s-canary == 'true' }}
@@ -211,6 +221,7 @@ jobs:
       dry-run: true
       environment: 'test'
       runs-on: ubuntu-latest
+      timeout-minutes: 20
 
   test-k8s-bluegreen-deploy:
     if: ${{ github.event.inputs.run-k8s-bluegreen == 'true' }}
@@ -228,6 +239,7 @@ jobs:
       dry-run: true
       environment: 'test'
       runs-on: ubuntu-latest
+      timeout-minutes: 30
 
   test-k8s-bluegreen-promote:
     if: ${{ github.event.inputs.run-k8s-bluegreen == 'true' }}
@@ -245,6 +257,7 @@ jobs:
       dry-run: true
       environment: 'test'
       runs-on: ubuntu-latest
+      timeout-minutes: 30
 
   test-k8s-bluegreen-abort:
     if: ${{ github.event.inputs.run-k8s-bluegreen == 'true' }}
@@ -261,6 +274,7 @@ jobs:
       dry-run: true
       environment: 'test'
       runs-on: ubuntu-latest
+      timeout-minutes: 30
 
   test-k8s-job-run:
     if: ${{ github.event.inputs.run-k8s-job == 'true' }}
@@ -283,3 +297,4 @@ jobs:
       dry-run: true
       environment: 'test'
       runs-on: ubuntu-latest
+      timeout-minutes: 30
