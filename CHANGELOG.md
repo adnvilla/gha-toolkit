@@ -1,3 +1,13 @@
+## [1.9.2](https://github.com/adnvilla/gha-toolkit/compare/v1.9.1...v1.9.2) (2026-09-18)
+
+### 🐛 Bug Fixes
+
+* isolate workflow inputs from run scripts ([1e81fc2](https://github.com/adnvilla/gha-toolkit/commit/1e81fc21ee1e0a9f7a2ce38b8fbedb18811ee801))
+
+### 📚 Documentation
+
+* clarify workflow run expression guard ([b518526](https://github.com/adnvilla/gha-toolkit/commit/b518526850f61896e92cfc56bf91668ed1c52789))
+
 ## [1.9.1](https://github.com/adnvilla/gha-toolkit/compare/v1.9.0...v1.9.1) (2026-09-18)
 
 ### 🐛 Bug Fixes
