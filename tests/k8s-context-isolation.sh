@@ -3,19 +3,31 @@
 # cluster-facing Helm/kubectl calls name the caller's context explicitly instead
 # of relying on (or mutating) the runner's kubeconfig current-context.
 #
-# Usage: bash tests/k8s-context-isolation.sh [repository root]
+# Usage: bash tests/k8s-context-isolation.sh [k8s-deploy.yml k8s-canary.yml k8s-bluegreen.yml k8s-job.yml]
 set -euo pipefail
 
-REPO_ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+if (( $# == 0 )); then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  WORKFLOWS=(
+    "${REPO_ROOT}/.github/workflows/k8s-deploy.yml"
+    "${REPO_ROOT}/.github/workflows/k8s-canary.yml"
+    "${REPO_ROOT}/.github/workflows/k8s-bluegreen.yml"
+    "${REPO_ROOT}/.github/workflows/k8s-job.yml"
+  )
+elif (( $# == 4 )); then
+  WORKFLOWS=("$@")
+else
+  echo "usage: $0 [k8s-deploy.yml k8s-canary.yml k8s-bluegreen.yml k8s-job.yml]" >&2
+  exit 2
+fi
 
-REPO_ROOT="${REPO_ROOT}" python3 <<'PY'
-import os
+python3 - "${WORKFLOWS[@]}" <<'PY'
 import sys
 from pathlib import Path
 
 import yaml
 
-root = Path(os.environ["REPO_ROOT"])
 workflows = {
     "k8s-deploy.yml": {
         "Adopt existing resources": (
@@ -58,8 +70,9 @@ workflows = {
 }
 
 failures = []
-for filename, expected_steps in workflows.items():
-    path = root / ".github/workflows" / filename
+for filename, path_text in zip(workflows, sys.argv[1:]):
+    expected_steps = workflows[filename]
+    path = Path(path_text)
     text = path.read_text(encoding="utf-8")
     if "kubectl config use-context" in text:
         failures.append(f"{filename}: mutates kubeconfig with kubectl config use-context")
