@@ -239,6 +239,10 @@ Every reusable workflow MUST:
 5. Pin third-party action versions (`@v4`, not `@latest`/`@master`) and pin any ad-hoc installed package
    majors (see `release.yml`'s `npm install -g` of `semantic-release@^25` etc.).
 6. Never log secrets; require them to be passed explicitly via `secrets:`.
+7. Declare workflow-level `permissions:` explicitly, granting only the scopes each workflow uses.
+   Reusable workflows can reduce caller permissions but never elevate them; use `contents: read`
+   by default, add `packages: write` only for GHCR publishing, and reserve `contents: write` for
+   releases that create commits, tags, or releases.
 
 Internal workflows (`ci.yml`, `auto-release.yml`, `test.yml`) are exempt from the reusable rules — they
 govern this repo only and are not meant to be called by others.

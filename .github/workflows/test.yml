@@ -58,6 +58,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   test-go-workflow:
     if: ${{ github.event.inputs.run-go == 'true' }}
@@ -68,9 +71,11 @@ jobs:
 
   test-release-workflow:
     if: ${{ github.event.inputs.run-release == 'true' }}
-    uses: ./.github/workflows/release.yml
+    # semantic-release --dry-run verifies that this token could push a release.
+    # The reusable workflow cannot elevate the caller's GITHUB_TOKEN permissions.
     permissions:
       contents: write
+    uses: ./.github/workflows/release.yml
     with:
       dry-run: true  # Always in dry-run for this repo
     secrets:

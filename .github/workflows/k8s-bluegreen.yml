@@ -198,6 +198,9 @@ on:
         description: 'Image reference applied by this run'
         value: ${{ jobs.bluegreen.outputs.image }}
 
+permissions:
+  contents: read
+
 jobs:
   bluegreen:
     runs-on: ${{ inputs.runs-on }}

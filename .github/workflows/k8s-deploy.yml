@@ -146,6 +146,9 @@ on:
         type: string
         default: 'self-hosted'
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ${{ inputs.runs-on }}

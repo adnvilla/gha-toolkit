@@ -9,6 +9,9 @@ on:
   pull_request:
     branches: ["master"]
 
+permissions:
+  contents: read
+
 jobs:
   validate-workflows:
     name: Validate Workflow Syntax
@@ -261,6 +264,9 @@ jobs:
 
       - name: Test workflow run expression isolation
         run: bash tests/no-inline-run-expressions.sh
+
+      - name: Test workflow permissions
+        run: bash tests/workflow-permissions.sh
 
       - name: Test Python workflow commands
         run: bash tests/python-workflow.sh

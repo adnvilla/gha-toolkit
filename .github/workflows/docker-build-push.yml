@@ -85,6 +85,10 @@ on:
         description: 'The short commit SHA used as the primary tag'
         value: ${{ jobs.build.outputs.short-sha }}
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     runs-on: ${{ inputs.runs-on }}
