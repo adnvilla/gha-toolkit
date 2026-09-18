@@ -259,6 +259,9 @@ jobs:
       - name: Test Kubernetes context isolation
         run: bash tests/k8s-context-isolation.sh
 
+      - name: Test workflow run expression isolation
+        run: bash tests/no-inline-run-expressions.sh
+
       - name: Test Python workflow commands
         run: bash tests/python-workflow.sh
 
@@ -331,28 +334,35 @@ jobs:
     if: always()
     steps:
       - name: Check CI Status
+        env:
+          VALIDATE_WORKFLOWS_RESULT: ${{ needs.validate-workflows.result }}
+          VALIDATE_ACTIONS_RESULT: ${{ needs.validate-actions.result }}
+          VALIDATE_CHART_RESULT: ${{ needs.validate-chart.result }}
+          VALIDATE_SHELL_LOGIC_RESULT: ${{ needs.validate-shell-logic.result }}
+          VALIDATE_DOC_PINS_RESULT: ${{ needs.validate-doc-pins.result }}
+          VALIDATE_MARKDOWN_RESULT: ${{ needs.validate-markdown.result }}
         run: |
-          if [ "${{ needs.validate-workflows.result }}" != "success" ]; then
+          if [ "${VALIDATE_WORKFLOWS_RESULT}" != "success" ]; then
             echo "Workflow validation failed"
             exit 1
           fi
-          if [ "${{ needs.validate-actions.result }}" != "success" ]; then
+          if [ "${VALIDATE_ACTIONS_RESULT}" != "success" ]; then
             echo "Workflow semantic validation (actionlint) failed"
             exit 1
           fi
-          if [ "${{ needs.validate-chart.result }}" != "success" ]; then
+          if [ "${VALIDATE_CHART_RESULT}" != "success" ]; then
             echo "Helm chart validation failed"
             exit 1
           fi
-          if [ "${{ needs.validate-shell-logic.result }}" != "success" ]; then
+          if [ "${VALIDATE_SHELL_LOGIC_RESULT}" != "success" ]; then
             echo "Workflow shell logic tests failed"
             exit 1
           fi
-          if [ "${{ needs.validate-doc-pins.result }}" != "success" ]; then
+          if [ "${VALIDATE_DOC_PINS_RESULT}" != "success" ]; then
             echo "Documentation version pin validation failed"
             exit 1
           fi
-          if [ "${{ needs.validate-markdown.result }}" != "success" ]; then
+          if [ "${VALIDATE_MARKDOWN_RESULT}" != "success" ]; then
             echo "Markdown validation failed (warning only)"
           fi
           echo "CI Complete ✅"
