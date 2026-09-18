@@ -46,12 +46,20 @@ for raw_path in sys.argv[1:]:
     workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     jobs = workflow.get("jobs") or {}
 
-    if path.name in reusable_defaults:
-        inputs = (workflow.get(True) or workflow.get("on") or {}).get("workflow_call", {}).get("inputs", {})
+    trigger = workflow.get(True) or workflow.get("on") or {}
+    reusable = isinstance(trigger, dict) and "workflow_call" in trigger
+    if reusable:
+        inputs = (trigger.get("workflow_call") or {}).get("inputs", {})
         timeout = inputs.get("timeout-minutes") if isinstance(inputs, dict) else None
-        expected = reusable_defaults[path.name]
-        if not isinstance(timeout, dict) or timeout.get("type") != "number" or timeout.get("default") != expected:
-            failures.append(f"{path}: timeout-minutes input must be number with default {expected}")
+        expected = reusable_defaults.get(path.name)
+        if not isinstance(timeout, dict) or timeout.get("type") != "number":
+            failures.append(f"{path}: reusable workflow must expose a numeric timeout-minutes input")
+        elif not isinstance(timeout.get("default"), int) or timeout["default"] <= 0:
+            failures.append(f"{path}: timeout-minutes input must have a positive default")
+        elif expected is None:
+            failures.append(f"{path}: reusable workflow is missing an approved timeout default")
+        elif timeout["default"] != expected:
+            failures.append(f"{path}: timeout-minutes input default {timeout['default']}, expected {expected}")
 
     for job_name, job in jobs.items():
         if not isinstance(job, dict):

@@ -265,6 +265,8 @@ Because consumers pin versions, input/behavior changes are an API contract.
 
 - Renaming or removing an input/secret/output.
 - Changing a default in a way that changes observed behavior/rendered output.
+- Adding a default timeout that lowers the previous implicit GitHub Actions job limit; publish it as a
+  breaking change and tell consumers how to retain a longer limit.
 - Renaming or moving a workflow file (breaks `uses:` paths and doc pins).
 - Chart: renaming/removing a value, or changing a default that changes rendered manifests.
 

@@ -5,7 +5,9 @@ This document contains practical examples of how to use the reusable workflows i
 ## Configuring a workflow timeout
 
 Every reusable workflow accepts `timeout-minutes`. The defaults protect runners from stalled network or
-build operations; raise the value only for a workload with a measured need.
+build operations; raise the value only for a workload with a measured need. These defaults replace the
+previous implicit 360-minute GitHub job limit, so set the value explicitly before upgrading when a job
+needs longer.
 
 ```yaml
 jobs:
