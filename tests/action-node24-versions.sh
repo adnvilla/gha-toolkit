@@ -66,7 +66,7 @@ def inspect(node, path: Path, lines: list[str]) -> None:
             inspect(item, path, lines)
 
 
-for workflow in sorted(WORKFLOWS.glob("*.yml")):
+for workflow in sorted(path for path in WORKFLOWS.iterdir() if path.suffix in {".yml", ".yaml"}):
     source = workflow.read_text(encoding="utf-8")
     try:
         document = yaml.compose(source)
