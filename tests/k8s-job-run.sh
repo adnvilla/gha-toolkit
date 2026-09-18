@@ -89,6 +89,9 @@ chmod +x "${STUB_DIR}/helm"
 cat > "${STUB_DIR}/kubectl" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${KUBECTL_CALLS_FILE}"
+if [ "$1" = "--context" ]; then
+  shift 2
+fi
 case "$1" in
   get)
     case "$2" in
@@ -179,6 +182,7 @@ run_render() {
     HELM_SET="" \
     DRY_RUN="${DRY_RUN}" \
     MANIFEST="${WORK_DIR}/manifest.yaml" \
+    KUBE_CONTEXT=test-context \
     bash "${RENDER_SCRIPT}" > "${STEP_LOG}" 2>&1
   STEP_STATUS=$?
   set -e
@@ -198,6 +202,7 @@ run_wait() {
     POLL_INTERVAL=1 \
     TAIL_LINES=-1 \
     DELETE_ON_SUCCESS="${DELETE_ON_SUCCESS}" \
+    KUBE_CONTEXT=test-context \
     bash "${WAIT_SCRIPT}" > "${STEP_LOG}" 2>&1
   STEP_STATUS=$?
   set -e
@@ -219,6 +224,7 @@ run_cronjob() {
     NAMESPACE=service \
     CRONJOB_NAME="${CRONJOB_NAME}" \
     NAME_SUFFIX="${NAME_SUFFIX}" \
+    KUBE_CONTEXT=test-context \
     bash "${CRONJOB_SCRIPT}" > "${STEP_LOG}" 2>&1
   STEP_STATUS=$?
   set -e
@@ -244,10 +250,26 @@ service-app-nightly-report"
 
 expect_success() {
   [ "${STEP_STATUS}" -eq 0 ] || fail "step exited ${STEP_STATUS}, expected 0"
+  expect_contexts
 }
 
 expect_failure() {
   [ "${STEP_STATUS}" -ne 0 ] || fail "step exited 0, expected a failure"
+  expect_contexts
+}
+
+expect_contexts() {
+  if [ -s "${HELM_ARGS_FILE}" ]; then
+    grep -Fxq -- "--kube-context" "${HELM_ARGS_FILE}" \
+      || fail "helm template did not receive --kube-context"
+    grep -Fxq -- "test-context" "${HELM_ARGS_FILE}" \
+      || fail "helm template did not receive test-context"
+  fi
+  while IFS= read -r call; do
+    [ -z "${call}" ] && continue
+    [[ "${call}" == "--context test-context "* ]] \
+      || fail "kubectl call did not select test-context: ${call}"
+  done < "${KUBECTL_CALLS_FILE}"
 }
 
 expect_helm_arg() {

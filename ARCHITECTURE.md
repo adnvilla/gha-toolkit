@@ -506,8 +506,9 @@ the workflow YAML alone. The runner machine must have:
 - **Docker daemon** configured with the registry host under `insecure-registries` (Docker Desktop:
   Settings → Docker Engine) if pushing to a local/private registry without TLS
 - **kubectl**, with every context passed via `kube-context` already defined locally — the kubeconfig
-  lives on the runner machine and is never passed as a GitHub secret, matching how `navi-admin`'s
-  existing pipeline works today
+  lives on the runner machine and is never passed as a GitHub secret. The toolkit verifies and uses
+  that context explicitly for every cluster operation; it never changes the kubeconfig's
+  `current-context`, so concurrent jobs cannot redirect one another to a different cluster
 - **helm** — deploy workflows install it via `azure/setup-helm` if missing, but a pre-installed
   version avoids the extra download on every run
 - **Node/pnpm/corepack** available if `node.yml` also runs on that runner

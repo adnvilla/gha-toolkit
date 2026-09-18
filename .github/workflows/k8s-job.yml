@@ -222,11 +222,12 @@ jobs:
         with:
           version: ${{ inputs.helm-version }}
 
-      - name: Select kube context
+      - name: Verify kube context
         if: ${{ !inputs.dry-run }}
+        env:
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
-          kubectl config use-context "${{ inputs.kube-context }}"
-          kubectl cluster-info
+          kubectl --context "${KUBE_CONTEXT}" cluster-info
 
       - name: Render Job manifest
         id: render
@@ -246,6 +247,7 @@ jobs:
           HELM_SET: ${{ inputs.helm-set }}
           DRY_RUN: ${{ inputs.dry-run }}
           MANIFEST: ${{ runner.temp }}/k8s-job.yaml
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
           set -euo pipefail
 
@@ -301,7 +303,7 @@ jobs:
             RENDER_ARGS+=(--set "$kv")
           done <<< "${HELM_SET}"
 
-          helm template "${RELEASE_NAME}" "${CHART_DIR}" \
+          helm template "${RELEASE_NAME}" "${CHART_DIR}" --kube-context "${KUBE_CONTEXT}" \
             "${RENDER_ARGS[@]}" --show-only "${JOB_TEMPLATE}" > "${MANIFEST}"
 
           # --show-only renders exactly one Job; read its name without needing PyYAML on the
@@ -332,9 +334,10 @@ jobs:
         env:
           NAMESPACE: ${{ inputs.namespace }}
           MANIFEST: ${{ steps.render.outputs.manifest }}
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
           set -euo pipefail
-          kubectl apply -n "${NAMESPACE}" -f "${MANIFEST}"
+          kubectl --context "${KUBE_CONTEXT}" apply -n "${NAMESPACE}" -f "${MANIFEST}"
 
       - name: Operate CronJob
         id: cronjob
@@ -345,6 +348,7 @@ jobs:
           NAMESPACE: ${{ inputs.namespace }}
           CRONJOB_NAME: ${{ inputs.cronjob-name }}
           NAME_SUFFIX: ${{ inputs.name-suffix }}
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
           set -euo pipefail
 
@@ -352,10 +356,10 @@ jobs:
           # rendered name is <chart fullname>-<name>, and the fullname moves with
           # nameOverride/fullnameOverride, so a bare name is discovered by label instead of being
           # guessed as "<release>-<name>".
-          if kubectl get cronjob "${CRONJOB_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+          if kubectl --context "${KUBE_CONTEXT}" get cronjob "${CRONJOB_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
             CRONJOB="${CRONJOB_NAME}"
           else
-            RELEASE_CRONJOBS="$(kubectl get cronjob -n "${NAMESPACE}" \
+            RELEASE_CRONJOBS="$(kubectl --context "${KUBE_CONTEXT}" get cronjob -n "${NAMESPACE}" \
               -l "app.kubernetes.io/instance=${RELEASE_NAME},app.kubernetes.io/component=cronjob" \
               -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
             MATCHES="$(printf '%s\n' "${RELEASE_CRONJOBS}" | grep -E -- "(^|-)${CRONJOB_NAME}\$" || true)"
@@ -384,15 +388,17 @@ jobs:
               # clipped suffix would collide with the previous attempt's Job.
               JOB_BASE="$(printf '%s' "${CRONJOB}" | cut -c1-"$((62 - ${#SUFFIX}))")"
               JOB="${JOB_BASE%-}-${SUFFIX}"
-              kubectl create job "${JOB}" --from="cronjob/${CRONJOB}" -n "${NAMESPACE}"
+              kubectl --context "${KUBE_CONTEXT}" create job "${JOB}" --from="cronjob/${CRONJOB}" -n "${NAMESPACE}"
               echo "job-name=${JOB}" >> "${GITHUB_OUTPUT}"
               ;;
             suspend-cronjob)
-              kubectl patch cronjob "${CRONJOB}" -n "${NAMESPACE}" -p '{"spec":{"suspend":true}}'
+              kubectl --context "${KUBE_CONTEXT}" patch cronjob "${CRONJOB}" \
+                -n "${NAMESPACE}" -p '{"spec":{"suspend":true}}'
               echo "status=patched" >> "${GITHUB_OUTPUT}"
               ;;
             resume-cronjob)
-              kubectl patch cronjob "${CRONJOB}" -n "${NAMESPACE}" -p '{"spec":{"suspend":false}}'
+              kubectl --context "${KUBE_CONTEXT}" patch cronjob "${CRONJOB}" \
+                -n "${NAMESPACE}" -p '{"spec":{"suspend":false}}'
               echo "status=patched" >> "${GITHUB_OUTPUT}"
               ;;
           esac
@@ -408,6 +414,7 @@ jobs:
           POLL_INTERVAL: ${{ inputs.poll-interval-seconds }}
           TAIL_LINES: ${{ inputs.tail-lines }}
           DELETE_ON_SUCCESS: ${{ inputs.delete-on-success }}
+          KUBE_CONTEXT: ${{ inputs.kube-context }}
         run: |
           set -euo pipefail
 
@@ -418,7 +425,7 @@ jobs:
           DEADLINE=$((SECONDS + TIMEOUT_SECONDS))
           STATUS="timeout"
           while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
-            CONDITIONS="$(kubectl get job "${JOB_NAME}" -n "${NAMESPACE}" \
+            CONDITIONS="$(kubectl --context "${KUBE_CONTEXT}" get job "${JOB_NAME}" -n "${NAMESPACE}" \
               -o jsonpath='{range .status.conditions[?(@.status=="True")]}{.type}{" "}{end}' \
               2>/dev/null || echo "")"
             case " ${CONDITIONS} " in
@@ -435,7 +442,7 @@ jobs:
           done
 
           echo "::group::Logs for job/${JOB_NAME}"
-          kubectl logs "job/${JOB_NAME}" -n "${NAMESPACE}" \
+          kubectl --context "${KUBE_CONTEXT}" logs "job/${JOB_NAME}" -n "${NAMESPACE}" \
             --all-containers --tail="${TAIL_LINES}" || echo "(no logs available)"
           echo "::endgroup::"
 
@@ -446,12 +453,12 @@ jobs:
 
           if [ "${STATUS}" != "succeeded" ]; then
             echo "::group::kubectl describe job/${JOB_NAME}"
-            kubectl describe job "${JOB_NAME}" -n "${NAMESPACE}" || true
+            kubectl --context "${KUBE_CONTEXT}" describe job "${JOB_NAME}" -n "${NAMESPACE}" || true
             echo "::endgroup::"
             echo "::error::Job ${JOB_NAME} ${STATUS}"
             exit 1
           fi
 
           if [ "${DELETE_ON_SUCCESS}" == "true" ]; then
-            kubectl delete job "${JOB_NAME}" -n "${NAMESPACE}"
+            kubectl --context "${KUBE_CONTEXT}" delete job "${JOB_NAME}" -n "${NAMESPACE}"
           fi
