@@ -1,3 +1,10 @@
+## [1.9.3](https://github.com/adnvilla/gha-toolkit/compare/v1.9.2...v1.9.3) (2026-09-18)
+
+### 🐛 Bug Fixes
+
+* declare least-privilege workflow permissions ([2d394ba](https://github.com/adnvilla/gha-toolkit/commit/2d394ba3a694c3c9f97fc9b948ada399825a24f3))
+* preserve release smoke permissions ([63f515a](https://github.com/adnvilla/gha-toolkit/commit/63f515a2831e04763bbe115990483727e9992cb6))
+
 ## [1.9.2](https://github.com/adnvilla/gha-toolkit/compare/v1.9.1...v1.9.2) (2026-09-18)
 
 ### 🐛 Bug Fixes
