@@ -1,3 +1,9 @@
+## [1.9.1](https://github.com/adnvilla/gha-toolkit/compare/v1.9.0...v1.9.1) (2026-09-18)
+
+### 🐛 Bug Fixes
+
+* isolate Kubernetes workflow contexts ([58bd27e](https://github.com/adnvilla/gha-toolkit/commit/58bd27e3f7565d95abad14576903bfa56cf4b332))
+
 ## [1.9.0](https://github.com/adnvilla/gha-toolkit/compare/v1.8.0...v1.9.0) (2026-09-16)
 
 ### 🚀 Features
