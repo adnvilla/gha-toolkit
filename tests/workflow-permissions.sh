@@ -50,7 +50,9 @@ for raw_path in sys.argv[1:]:
         failures.append(f"{path}: missing workflow-level permissions mapping")
         continue
     wanted = expected.get(path.name)
-    if wanted is not None and permissions != wanted:
+    if wanted is None:
+        failures.append(f"{path}: not covered by least-privilege permission contract")
+    elif permissions != wanted:
         failures.append(f"{path}: permissions {permissions!r}, expected {wanted!r}")
 
 if failures:
