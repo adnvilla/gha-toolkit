@@ -16,6 +16,7 @@ jobs:
   validate-workflows:
     name: Validate Workflow Syntax
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -33,6 +34,7 @@ jobs:
   validate-actions:
     name: Validate Workflow Semantics
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -57,6 +59,7 @@ jobs:
   validate-markdown:
     name: Validate Markdown
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -71,6 +74,7 @@ jobs:
   validate-chart:
     name: Validate Helm Chart
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -227,6 +231,7 @@ jobs:
   validate-shell-logic:
     name: Validate Workflow Shell Logic
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -268,6 +273,9 @@ jobs:
       - name: Test workflow permissions
         run: bash tests/workflow-permissions.sh
 
+      - name: Test workflow timeouts
+        run: bash tests/workflow-timeouts.sh
+
       - name: Test Python workflow commands
         run: bash tests/python-workflow.sh
 
@@ -277,6 +285,7 @@ jobs:
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout (full history + tags)
         uses: actions/checkout@v7
@@ -330,6 +339,7 @@ jobs:
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - validate-workflows
       - validate-actions

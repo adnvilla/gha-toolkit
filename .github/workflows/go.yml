@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: 'ubuntu-latest'
+      timeout-minutes:
+        description: 'Maximum job duration in minutes'
+        required: false
+        type: number
+        default: 30
 
 permissions:
   contents: read
@@ -49,6 +54,7 @@ permissions:
 jobs:
   build:
     runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     services:
       postgres:
         image: postgres:${{ inputs.postgres-version }}

@@ -145,6 +145,7 @@ bash tests/bluegreen-slot-flip.sh
 bash tests/k8s-job-run.sh
 bash tests/k8s-context-isolation.sh
 bash tests/no-inline-run-expressions.sh
+bash tests/workflow-timeouts.sh
 bash tests/release-rules.sh
 
 # 6. Release dry-run (optional; needs GITHUB_TOKEN)
@@ -243,6 +244,10 @@ Every reusable workflow MUST:
    Reusable workflows can reduce caller permissions but never elevate them; use `contents: read`
    by default, add `packages: write` only for GHCR publishing, and reserve `contents: write` for
    releases that create commits, tags, or releases.
+8. Expose a numeric `timeout-minutes` input with a documented, workload-appropriate default and set
+   every direct job's `timeout-minutes` from it. A job that calls a reusable workflow cannot declare
+   that key itself, so it must pass the input through `with:`. Internal jobs also declare a bounded
+   timeout directly.
 
 Internal workflows (`ci.yml`, `auto-release.yml`, `test.yml`) are exempt from the reusable rules — they
 govern this repo only and are not meant to be called by others.
@@ -261,6 +266,8 @@ Because consumers pin versions, input/behavior changes are an API contract.
 
 - Renaming or removing an input/secret/output.
 - Changing a default in a way that changes observed behavior/rendered output.
+- Adding a default timeout that lowers the previous implicit GitHub Actions job limit; publish it as a
+  breaking change and tell consumers how to retain a longer limit.
 - Renaming or moving a workflow file (breaks `uses:` paths and doc pins).
 - Chart: renaming/removing a value, or changing a default that changes rendered manifests.
 
@@ -335,6 +342,8 @@ Before considering a change complete:
       Node.js 20 runtime.
 - [ ] `bash tests/no-inline-run-expressions.sh` passes so expressions cannot be interpolated into
       workflow shell scripts.
+- [ ] `bash tests/workflow-timeouts.sh` passes so every job remains bounded and reusable workflows
+      expose their timeout input.
 - [ ] `bash tests/release-rules.sh` passes when `.releaserc.json` or `.releaserc.json.example`
       changed, so a breaking change still releases a major.
 - [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.

@@ -155,6 +155,12 @@ on:
         required: false
         type: string
         default: 'self-hosted'
+      timeout-minutes:
+        description: >-
+          Maximum workflow duration in minutes, including setup and the Job wait period.
+        required: false
+        type: number
+        default: 35
     outputs:
       action:
         description: 'Action that was executed'
@@ -172,6 +178,7 @@ permissions:
 jobs:
   k8s-job:
     runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     environment:
       name: ${{ inputs.environment }}
       url: ${{ inputs.environment-url }}
