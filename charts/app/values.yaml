@@ -73,6 +73,12 @@ ingress:
   host: ""
   path: /
   pathType: Prefix
+  tls:
+    enabled: false
+    # Empty uses <fullname>-tls. Set an existing Secret or let cert-manager create it.
+    secretName: ""
+    # Additional DNS names to include in the certificate for this Ingress.
+    extraHosts: []
 
 # Deployment strategy. Default `rolling` preserves the single-Deployment behaviour
 # used by k8s-deploy.yml. Set to `canary` (APIs) or `blueGreen` (e.g. Kafka workers)
@@ -104,6 +110,8 @@ canary:
     path: /
     pathType: Prefix
     annotations: {}
+    # Merged over ingress.tls. Empty inherits the main TLS configuration.
+    tls: {}
   # Traefik IngressRoute entryPoints when trafficProvider=traefik.
   traefik:
     entryPoints:
@@ -140,6 +148,8 @@ blueGreen:
       pathType: Prefix
       # className: "" # falls back to ingress.className
       annotations: {}
+      # Merged over ingress.tls. Empty inherits the main TLS configuration.
+      tls: {}
 
 # Opt-in resources (default off — existing consumers see no change).
 serviceAccount:

@@ -51,6 +51,7 @@ tests/                   # Shell-logic tests: extract a workflow step's `run:` b
   ingress-host-composition.sh # prefix + INGRESS_BASE_DOMAIN host compose / non-clobber
   bluegreen-slot-flip.sh      # k8s-bluegreen.yml slot flip, status, preview and verify/auto-abort
   k8s-job-run.sh              # k8s-job.yml render/wait/CronJob logic (all non-dry-run)
+  chart-ingress-tls.sh        # TLS rendering for standard, canary, preview and Traefik Ingresses
   k8s-context-isolation.sh    # explicit Kubernetes context / no shared-kubeconfig mutation guard
   action-node24-versions.sh   # rejects action releases that still embed Node.js 20
   release-rules.sh            # releaseRules must release breaking changes as major
@@ -109,7 +110,9 @@ helm lint charts/app
 helm template test-release charts/app \
   --set image.repository=registry.example.local:5000/test-app \
   --set image.tag=test \
-  --set ingress.enabled=true --set ingress.host=test.local > /dev/null
+  --set ingress.enabled=true --set ingress.host=test.local \
+  --set ingress.tls.enabled=true --set ingress.tls.secretName=test-local-tls \
+  --set 'ingress.tls.extraHosts[0]=www.test.local' > /dev/null
 # Also render with all default-off resources ON (SA/HPA/PDB/NetworkPolicy) to catch template errors:
 helm template test-release charts/app \
   --set image.repository=registry.example.local:5000/test-app \
@@ -118,6 +121,7 @@ helm template test-release charts/app \
   --set podDisruptionBudget.enabled=true --set networkPolicy.enabled=true > /dev/null
 # Pod/container security contexts render in every workload mode, including batch overrides:
 bash tests/chart-security-contexts.sh
+bash tests/chart-ingress-tls.sh
 # Canary + blueGreen modes (match ci.yml validate-chart extras):
 helm template test-release charts/app \
   --set image.repository=registry.example.local:5000/test-app --set image.tag=stable \

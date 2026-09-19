@@ -1,6 +1,7 @@
 {{- /* Optional smoke-test Ingress for the canary Service (trafficProvider=none). */ -}}
 {{- if and (eq (include "app.strategyMode" .) "canary") .Values.canary.ingress.enabled (ne .Values.canary.trafficProvider "traefik") -}}
 {{- $host := include "app.canary.ingressHost" . -}}
+{{- $tls := mergeOverwrite (deepCopy .Values.ingress.tls) (.Values.canary.ingress.tls | default dict) -}}
 {{- if $host }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -16,6 +17,15 @@ metadata:
 spec:
   {{- with .Values.ingress.className }}
   ingressClassName: {{ . }}
+  {{- end }}
+  {{- if $tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+        {{- range $tls.extraHosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ $tls.secretName | default (printf "%s-tls" (include "app.canary.fullname" .)) }}
   {{- end }}
   rules:
     - host: {{ $host | quote }}

@@ -18,6 +18,15 @@ spec:
   {{- with .Values.ingress.className }}
   ingressClassName: {{ . }}
   {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+        {{- range .Values.ingress.tls.extraHosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" (include "app.fullname" .)) }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.host | quote }}
       http:

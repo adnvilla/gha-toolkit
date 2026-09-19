@@ -35,6 +35,10 @@ metadata:
 spec:
   entryPoints:
     {{- toYaml .Values.canary.traefik.entryPoints | nindent 4 }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" (include "app.fullname" .)) }}
+  {{- end }}
   routes:
     - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule

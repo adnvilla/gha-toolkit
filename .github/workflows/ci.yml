@@ -93,7 +93,10 @@ jobs:
             --set image.repository=registry.example.local:5000/test-app \
             --set image.tag=test \
             --set ingress.enabled=true \
-            --set ingress.host=test.local > /dev/null
+            --set ingress.host=test.local \
+            --set ingress.tls.enabled=true \
+            --set ingress.tls.secretName=test-local-tls \
+            --set 'ingress.tls.extraHosts[0]=www.test.local' > /dev/null
 
       - name: Render chart with optional resources enabled
         run: |
@@ -114,6 +117,9 @@ jobs:
 
       - name: Test chart security contexts
         run: bash tests/chart-security-contexts.sh
+
+      - name: Test chart Ingress TLS
+        run: bash tests/chart-ingress-tls.sh
 
       - name: Render chart in canary mode
         run: |

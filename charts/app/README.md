@@ -19,6 +19,33 @@ helm upgrade --install my-app charts/app \
 In practice this is driven by the reusable deploy workflows, which handle the checkout, context
 selection and image parsing for you.
 
+## TLS for Ingress
+
+Enable `ingress.tls` to render `spec.tls` alongside the normal Ingress rule. With cert-manager,
+pass its issuer annotation and let the ingress-shim create the default `<fullname>-tls` Secret:
+
+```yaml
+ingress:
+  enabled: true
+  host: api.example.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+  tls:
+    enabled: true
+    extraHosts:
+      - www.api.example.com
+```
+
+Set `ingress.tls.secretName` when the certificate Secret already exists. If a single explicit
+Secret is reused by the main, canary or preview Ingress, it must contain every host rendered by
+those Ingresses. Otherwise, each Ingress uses its own stable default (`<fullname>-tls`,
+`<fullname>-canary-tls`, or `<fullname>-preview-tls`).
+
+Canary and blue/green preview Ingresses inherit `ingress.tls`; their `tls` blocks can override
+individual fields. A Traefik weighted canary writes the same `secretName` to its `IngressRoute`.
+Set `canary.traefik.entryPoints` to the controller's TLS entry point (commonly `websecure`); the
+chart does not force an entry point because controller names differ between clusters.
+
 ## Deployment strategies
 
 | `strategy.mode` | Workflow | Behaviour |
@@ -150,6 +177,9 @@ Details worth knowing:
 | `ingress.annotations` | `{}` | Ingress annotations (e.g. Traefik entrypoints) |
 | `ingress.host` | `""` | Ingress host. `k8s-deploy.yml` / `k8s-canary.yml` / `k8s-bluegreen.yml` compose `{ingress-prefix}.{INGRESS_BASE_DOMAIN}` when both are set and this key is omitted from the values file |
 | `ingress.path` / `ingress.pathType` | `/` / `Prefix` | Ingress rule path |
+| `ingress.tls.enabled` | `false` | Render TLS for the Ingress rule |
+| `ingress.tls.secretName` | `""` | TLS Secret; empty uses `<fullname>-tls` |
+| `ingress.tls.extraHosts` | `[]` | Additional DNS names included in the TLS certificate |
 | `strategy.mode` | `rolling` | `rolling` \| `canary` \| `blueGreen` |
 | `canary.image.repository` / `tag` / `digest` | `""` | Canary image; digest takes precedence over tag |
 | `canary.replicas` | `1` | Canary Deployment replicas |
@@ -157,6 +187,7 @@ Details worth knowing:
 | `canary.trafficProvider` | `none` | `none` \| `traefik` |
 | `canary.ingress.enabled` | `false` | Smoke Ingress for canary Service (`none` provider) |
 | `canary.ingress.host` | `""` | Defaults to `canary.<ingress.host>` |
+| `canary.ingress.tls` | `{}` | Merged over `ingress.tls`; empty inherits the main configuration |
 | `canary.traefik.entryPoints` | `[web]` | IngressRoute entryPoints when using Traefik |
 | `blueGreen.activeSlot` | `blue` | `blue` \| `green` — Service selects this slot |
 | `blueGreen.overlapSeconds` | `0` | Documented for promote overlap; workflows drive the cutover |
@@ -166,6 +197,7 @@ Details worth knowing:
 | `blueGreen.preview.ingress.enabled` | `false` | Ingress for the preview Service |
 | `blueGreen.preview.ingress.host` | `""` | Defaults to `preview.<ingress.host>` |
 | `blueGreen.preview.ingress.path` / `pathType` / `className` / `annotations` | `/` / `Prefix` / from `ingress` / `{}` | Preview Ingress rule |
+| `blueGreen.preview.ingress.tls` | `{}` | Merged over `ingress.tls`; empty inherits the main configuration |
 | `serviceAccount.create` | `false` | Create a ServiceAccount and mount it on pods |
 | `serviceAccount.name` | `""` | SA name override (defaults to fullname when create is true) |
 | `serviceAccount.annotations` | `{}` | SA annotations (e.g. workload identity) |
