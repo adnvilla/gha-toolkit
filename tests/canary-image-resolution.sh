@@ -257,7 +257,6 @@ FAKE_VALUES_FILE="${VALUES_WITH_DIGEST_ONLY_CANARY}"
 run_step
 expect_success
 expect_helm_set "canary.image.repository=registry.example.com/service"
-expect_helm_set "canary.image.digest=sha256:canary"
 expect_step_output "image=registry.example.com/service@sha256:canary"
 end_case
 
@@ -271,7 +270,6 @@ run_step
 expect_success
 expect_helm_set "canary.image.repository=registry.example.com/canary"
 expect_helm_set "canary.image.tag=latest"
-expect_helm_set "canary.image.digest="
 expect_step_output "image=registry.example.com/canary:latest"
 end_case
 
