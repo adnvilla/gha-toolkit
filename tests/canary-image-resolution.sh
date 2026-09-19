@@ -208,6 +208,10 @@ expect_helm_set() {
   grep -Fxq "$1" "${HELM_ARGS_FILE}" || fail "missing helm --set $1"
 }
 
+expect_no_helm_set_key() {
+  ! grep -Fq -- "$1=" "${HELM_ARGS_FILE}" || fail "unexpected helm --set key $1"
+}
+
 expect_step_output() {
   grep -Fxq "$1" "${STEP_OUTPUT}" || fail "missing step output '$1'"
 }
@@ -257,6 +261,8 @@ FAKE_VALUES_FILE="${VALUES_WITH_DIGEST_ONLY_CANARY}"
 run_step
 expect_success
 expect_helm_set "canary.image.repository=registry.example.com/service"
+expect_no_helm_set_key "image.digest"
+expect_no_helm_set_key "canary.image.digest"
 expect_step_output "image=registry.example.com/service@sha256:canary"
 end_case
 

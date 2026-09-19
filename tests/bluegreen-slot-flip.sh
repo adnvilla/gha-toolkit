@@ -270,6 +270,10 @@ expect_no_helm_set() {
   ! grep -Fxq "$1" "${HELM_ARGS_FILE}" || fail "unexpected helm --set $1"
 }
 
+expect_no_helm_set_key() {
+  ! grep -Fq -- "$1=" "${HELM_ARGS_FILE}" || fail "unexpected helm --set key $1"
+}
+
 expect_helm_calls() {
   local want="$1"
   local got
@@ -344,6 +348,9 @@ run_step
 expect_success
 expect_step_output "image=registry.example.com/worker@sha256:active"
 expect_helm_set "blueGreen.blue.image.tag=v0"
+expect_no_helm_set_key "image.digest"
+expect_no_helm_set_key "blueGreen.blue.image.digest"
+expect_no_helm_set_key "blueGreen.green.image.digest"
 end_case
 
 reset_env
