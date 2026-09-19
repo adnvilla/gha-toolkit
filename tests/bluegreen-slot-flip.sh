@@ -317,6 +317,8 @@ ACTION=abort
 run_step
 expect_success
 expect_step_output "image=registry.example.com/worker@sha256:active"
+expect_helm_set "blueGreen.blue.image.tag=v0"
+expect_helm_set "blueGreen.blue.image.digest="
 end_case
 
 reset_env

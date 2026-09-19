@@ -334,13 +334,24 @@ jobs:
           fallback_repo = img.get("repository") or ""
           fallback_tag = img.get("tag") or ""
           fallback_digest = img.get("digest") or ""
+          def image_parts(slot):
+              slot_repo = slot.get("repository") or ""
+              slot_tag = slot.get("tag") or ""
+              slot_digest = slot.get("digest") or ""
+              # A slot with any explicit image field is an override. In particular, a tagged
+              # slot must not inherit an active slot top-level digest.
+              if not (slot_repo or slot_tag or slot_digest):
+                  slot_digest = fallback_digest
+              return [slot_repo or fallback_repo, slot_tag or fallback_tag, slot_digest]
+          blue_repo, blue_tag, blue_digest = image_parts(blue)
+          green_repo, green_tag, green_digest = image_parts(green)
           print("ACTIVE_SLOT=%r" % active)
-          print("BLUE_REPO=%r" % (blue.get("repository") or fallback_repo))
-          print("BLUE_TAG=%r" % (blue.get("tag") or fallback_tag))
-          print("BLUE_DIGEST=%r" % (blue.get("digest") or fallback_digest))
-          print("GREEN_REPO=%r" % (green.get("repository") or fallback_repo))
-          print("GREEN_TAG=%r" % (green.get("tag") or fallback_tag))
-          print("GREEN_DIGEST=%r" % (green.get("digest") or fallback_digest))
+          print("BLUE_REPO=%r" % blue_repo)
+          print("BLUE_TAG=%r" % blue_tag)
+          print("BLUE_DIGEST=%r" % blue_digest)
+          print("GREEN_REPO=%r" % green_repo)
+          print("GREEN_TAG=%r" % green_tag)
+          print("GREEN_DIGEST=%r" % green_digest)
           PY
           )"
 
