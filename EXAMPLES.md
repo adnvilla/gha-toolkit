@@ -353,7 +353,7 @@ jobs:
       namespace: my-app
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       ingress-prefix: my-app          # optional; defaults to release-name
       environment-url: https://my-app.example.com   # still caller-supplied
 ```
@@ -478,7 +478,7 @@ jobs:
       namespace: my-rust-api
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
 ```
 
 A minimal multi-stage `Dockerfile` for the service (compiles a release binary, then ships it on a
@@ -558,7 +558,7 @@ jobs:
       namespace: my-api
       kube-context: ${{ vars.KUBE_CONTEXT }}
       values-file: k8s/values-api.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       canary-weight: 10
       runs-on: self-hosted
 ```
@@ -632,7 +632,7 @@ jobs:
       namespace: my-worker
       kube-context: ${{ vars.KUBE_CONTEXT }}
       values-file: k8s/values-worker.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       active-replicas: 2
       inactive-replicas: 2
       overlap-seconds: 0
@@ -695,7 +695,7 @@ Run the migrations on every deploy:
       namespace: my-api
       kube-context: ${{ vars.KUBE_CONTEXT }}
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       migrations: 'true'   # '' (default) respects the values file, 'false' skips it
       runs-on: self-hosted
 ```
@@ -781,7 +781,7 @@ blueGreen:
       namespace: my-api
       kube-context: ${{ vars.KUBE_CONTEXT }}
       values-file: k8s/values-api.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       preview: true
       verify-url: https://preview.api.example.com/healthz
       auto-abort: true          # scale the bad slot back to 0 instead of leaving it up
@@ -796,7 +796,7 @@ blueGreen:
       namespace: my-api
       kube-context: ${{ vars.KUBE_CONTEXT }}
       values-file: k8s/values-api.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       verify-url: https://api.example.com/healthz
       runs-on: self-hosted
 ```
@@ -861,7 +861,7 @@ jobs:
       namespace: my-python-api
       kube-context: ${{ vars.KUBE_CONTEXT }}
       values-file: k8s/values-production.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       runs-on: self-hosted
 ```
 
