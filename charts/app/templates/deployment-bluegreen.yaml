@@ -3,6 +3,10 @@
 {{- $slotValues := index $.Values.blueGreen $slot }}
 {{- $repo := $slotValues.image.repository | default $.Values.image.repository }}
 {{- $tag := $slotValues.image.tag | default $.Values.image.tag }}
+{{- $digest := $slotValues.image.digest }}
+{{- if and (not $slotValues.image.repository) (not $slotValues.image.tag) (not $digest) -}}
+{{- $digest = $.Values.image.digest -}}
+{{- end -}}
 {{- $ctx := dict "root" $ "slot" $slot }}
 ---
 apiVersion: apps/v1
@@ -47,7 +51,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ include "app.name" $ }}
-          image: "{{ $repo }}:{{ $tag }}"
+          image: {{ include "app.imageRef" (dict "repository" $repo "tag" $tag "digest" $digest) | quote }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
             - name: http

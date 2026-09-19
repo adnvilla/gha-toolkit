@@ -11,6 +11,9 @@ replicaCount: 1
 image:
   repository: ""
   tag: "latest"
+  # Optional immutable digest (for example sha256:...). When set, the chart renders
+  # repository@digest instead of repository:tag.
+  digest: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -80,6 +83,7 @@ canary:
   image:
     repository: ""
     tag: ""
+    digest: ""
   replicas: 1
   # % of traffic sent to canary when trafficProvider=traefik (0–100). Ignored for
   # trafficProvider=none (canary is only reachable via canary.ingress).
@@ -112,11 +116,13 @@ blueGreen:
     image:
       repository: ""
       tag: ""
+      digest: ""
   green:
     replicas: 0
     image:
       repository: ""
       tag: ""
+      digest: ""
   # Preview Service (and optional Ingress) pointing at the INACTIVE slot, so the new
   # version can be smoke-tested before promote. Default off.
   preview:
@@ -176,6 +182,7 @@ job:
   image:
     repository: "" # defaults to image.repository
     tag: "" # defaults to image.tag
+    digest: "" # defaults to image.digest
     pullPolicy: "" # defaults to image.pullPolicy
   command: []
   args: []
@@ -202,6 +209,7 @@ migrations:
   image:
     repository: ""
     tag: ""
+    digest: ""
     pullPolicy: ""
   command: []
   args: []

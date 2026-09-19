@@ -283,12 +283,18 @@ jobs:
           if [ -n "${IMAGE}" ]; then
             IMAGE_REPO="${IMAGE}"
             IMAGE_TAG="latest"
-            if [[ "${IMAGE}" == *:* ]]; then
+            IMAGE_DIGEST=""
+            if [[ "${IMAGE}" == *@* ]]; then
+              IMAGE_REPO="${IMAGE%@*}"
+              IMAGE_TAG=""
+              IMAGE_DIGEST="${IMAGE#*@}"
+            elif [[ "${IMAGE}" == *:* ]]; then
               IMAGE_REPO="${IMAGE%:*}"
               IMAGE_TAG="${IMAGE##*:}"
             fi
             RENDER_ARGS+=(--set "image.repository=${IMAGE_REPO}")
             RENDER_ARGS+=(--set "image.tag=${IMAGE_TAG}")
+            RENDER_ARGS+=(--set "image.digest=${IMAGE_DIGEST}")
           fi
 
           # command/args arrive as one argv entry per line; --set-json keeps entries with

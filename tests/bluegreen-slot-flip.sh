@@ -104,6 +104,34 @@ cat > "${GREEN_ACTIVE_VALUES}" <<'JSON'
 }
 JSON
 
+# Same topology as above, but the active slot is immutable. Abort must return this exact reference.
+GREEN_ACTIVE_DIGEST_VALUES="${WORK_DIR}/green-active-digest.json"
+cat > "${GREEN_ACTIVE_DIGEST_VALUES}" <<'JSON'
+{
+  "image": {
+    "repository": "registry.example.com/worker",
+    "digest": "sha256:active"
+  },
+  "blueGreen": {
+    "activeSlot": "green",
+    "blue": {
+      "replicas": 0,
+      "image": {
+        "repository": "registry.example.com/worker",
+        "tag": "v0"
+      }
+    },
+    "green": {
+      "replicas": 2,
+      "image": {
+        "repository": "registry.example.com/worker",
+        "digest": "sha256:active"
+      }
+    }
+  }
+}
+JSON
+
 HELM_ARGS_FILE="${WORK_DIR}/helm-args.txt"
 HELM_CALLS_FILE="${WORK_DIR}/helm-calls.txt"
 HELM_COMMANDS_FILE="${WORK_DIR}/helm-commands.txt"
@@ -145,7 +173,7 @@ run_step() {
     HELM_CALLS_FILE="${HELM_CALLS_FILE}" \
     HELM_COMMANDS_FILE="${HELM_COMMANDS_FILE}" \
     FAKE_RELEASE_EXISTS=true \
-    FAKE_VALUES_FILE="${GREEN_ACTIVE_VALUES}" \
+    FAKE_VALUES_FILE="${LIVE_VALUES_FILE}" \
     FAKE_HTTP_STATUS="${FAKE_HTTP_STATUS:-200}" \
     GITHUB_OUTPUT="${STEP_OUTPUT}" \
     USE_LOCAL_CHART=true \
@@ -184,6 +212,7 @@ reset_env() {
   FAKE_HTTP_STATUS=200
   AUTO_ABORT=false
   OVERLAP_SECONDS=0
+  LIVE_VALUES_FILE="${GREEN_ACTIVE_VALUES}"
 }
 
 expect_success() {
@@ -279,6 +308,17 @@ expect_helm_set "blueGreen.activeSlot=green"
 expect_helm_set "blueGreen.blue.replicas=0"
 expect_helm_set "blueGreen.green.replicas=2"
 expect_step_output "active-slot=green"
+end_case
+
+reset_env
+begin_case "abort returns the active digest image when no image is supplied"
+LIVE_VALUES_FILE="${GREEN_ACTIVE_DIGEST_VALUES}"
+ACTION=abort
+run_step
+expect_success
+expect_step_output "image=registry.example.com/worker@sha256:active"
+expect_helm_set "blueGreen.blue.image.tag=v0"
+expect_helm_set "blueGreen.blue.image.digest="
 end_case
 
 reset_env

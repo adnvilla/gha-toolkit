@@ -149,7 +149,11 @@ Usage: include "app.job.podSpec" (dict "root" $ "job" $jobValues) | nindent <n>
 {{- $job := .job -}}
 {{- $img := $job.image | default dict -}}
 {{- $repo := $img.repository | default $root.Values.image.repository -}}
-{{- $tag := $img.tag | default $root.Values.image.tag -}}
+{{- $tag := $img.tag | default $root.Values.image.tag | default "latest" -}}
+{{- $digest := $img.digest -}}
+{{- if and (not $img.repository) (not $img.tag) (not $digest) -}}
+{{- $digest = $root.Values.image.digest -}}
+{{- end -}}
 {{- $pullPolicy := $img.pullPolicy | default $root.Values.image.pullPolicy -}}
 {{- $env := concat ($root.Values.env | default list) ($job.env | default list) -}}
 {{- $envFrom := concat ($root.Values.envFrom | default list) ($job.envFrom | default list) -}}
@@ -181,7 +185,7 @@ nodeSelector:
 {{- end }}
 containers:
   - name: {{ $job.name | default "job" }}
-    image: "{{ $repo }}:{{ $tag }}"
+    image: {{ include "app.imageRef" (dict "repository" $repo "tag" $tag "digest" $digest) | quote }}
     imagePullPolicy: {{ $pullPolicy }}
     {{- with $job.command }}
     command:
@@ -217,6 +221,7 @@ backoffLimit: {{ if hasKey $job "backoffLimit" }}{{ $job.backoffLimit }}{{ else 
 {{- if hasKey $job "ttlSecondsAfterFinished" }}
 ttlSecondsAfterFinished: {{ $job.ttlSecondsAfterFinished }}
 {{- end }}
+
 {{- if hasKey $job "activeDeadlineSeconds" }}
 activeDeadlineSeconds: {{ $job.activeDeadlineSeconds }}
 {{- end }}
@@ -226,6 +231,15 @@ parallelism: {{ $job.parallelism }}
 {{- if hasKey $job "completions" }}
 completions: {{ $job.completions }}
 {{- end }}
+{{- end -}}
+
+{{/* Render an immutable digest when supplied; otherwise retain the tag contract. */}}
+{{- define "app.imageRef" -}}
+{{- if .digest -}}
+{{- printf "%s@%s" .repository .digest -}}
+{{- else -}}
+{{- printf "%s:%s" .repository .tag -}}
+{{- end -}}
 {{- end -}}
 
 {{/*

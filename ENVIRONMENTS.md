@@ -86,7 +86,7 @@ concurrency:
 
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.3.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       # pull_request's own GITHUB_SHA is a synthetic merge commit, not the PR's real head —
       # pass it explicitly so the image is built from the code actually under review.
@@ -107,7 +107,7 @@ jobs:
       namespace: my-app-staging
       kube-context: local
       values-file: k8s/values-staging.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
 ```
 
 `k8s/values-staging.yaml` is a second values file next to your existing `values-local.yaml` — same
