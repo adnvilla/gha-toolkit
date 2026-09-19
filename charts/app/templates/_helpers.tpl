@@ -149,7 +149,7 @@ Usage: include "app.job.podSpec" (dict "root" $ "job" $jobValues) | nindent <n>
 {{- $job := .job -}}
 {{- $img := $job.image | default dict -}}
 {{- $repo := $img.repository | default $root.Values.image.repository -}}
-{{- $tag := $img.tag | default $root.Values.image.tag -}}
+{{- $tag := $img.tag | default $root.Values.image.tag | default "latest" -}}
 {{- $digest := $img.digest -}}
 {{- if and (not $img.repository) (not $img.tag) (not $digest) -}}
 {{- $digest = $root.Values.image.digest -}}

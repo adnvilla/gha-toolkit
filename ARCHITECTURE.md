@@ -292,7 +292,7 @@ on:
   (default: true)
 - Outputs: `image` (short-SHA tag for compatibility), `digest` and `image-digest-ref` after a push.
   Production deploys should consume `image-digest-ref` so the manifest names immutable bytes.
-- `extra-tags` remains `latest` in v1 for backward compatibility; removing that default is a v2
+- `extra-tags` remains `latest` in v2 for backward compatibility; removing that default is a v3
   breaking change and is deliberately deferred.
 - `runs-on` (string, default `ubuntu-latest`)
 

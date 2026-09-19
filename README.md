@@ -269,7 +269,7 @@ jobs:
 The build workflow exposes both `image` (the compatibility tag) and `image-digest-ref` after a push.
 Use `image-digest-ref` for staging and production: Kubernetes renders it as `repository@sha256:...`,
 which identifies immutable bytes. The Kubernetes workflows also accept tagged references and registries
-with a port. `extra-tags` remains `latest` for v1 compatibility; its removal is planned for v2.
+with a port. `extra-tags` remains `latest` for v2 compatibility; its removal is planned for v3.
 
 HTTP apps can omit `ingress.host` from values and pass `ingress-prefix` (defaults to `release-name`).
 The workflow composes `ingress.host={prefix}.{INGRESS_BASE_DOMAIN}` from the caller repo/environment

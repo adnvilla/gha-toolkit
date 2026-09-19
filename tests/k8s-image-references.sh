@@ -228,6 +228,18 @@ expect_chart_image \
   "${job_rendered}" \
   "registry.example.com/job:v2"
 
+job_repository_only_rendered="$(helm template child-digest-job-repository-only charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set job.enabled=true \
+  --set job.name=work \
+  --set job.image.repository=registry.example.com/job \
+  --show-only templates/job.yaml)"
+expect_chart_image \
+  "job repository-only child override keeps a usable tag" \
+  "${job_repository_only_rendered}" \
+  "registry.example.com/job:latest"
+
 if [ "${FAILURES}" -ne 0 ]; then
   echo "${FAILURES} assertion(s) failed"
   exit 1
