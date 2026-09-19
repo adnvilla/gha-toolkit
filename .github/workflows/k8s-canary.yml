@@ -414,6 +414,20 @@ jobs:
           echo "Resolved stable image: $(image_ref "${STABLE_REPO}" "${STABLE_TAG}" "${STABLE_DIGEST}")"
           echo "Resolved canary image: $(image_ref "${CANARY_REPO}" "${CANARY_TAG}" "${CANARY_DIGEST}")"
 
+          if [ "${USE_LOCAL_CHART}" == "true" ]; then
+            LOCAL_RENDER_ARGS=()
+            for ((index = 0; index < ${#RENDER_ARGS[@]}; index++)); do
+              arg="${RENDER_ARGS[index]}"
+              next="${RENDER_ARGS[index + 1]:-}"
+              if [ "${arg}" = "--set" ] && [[ "${next}" == image.digest=* || "${next}" == canary.image.digest=* ]]; then
+                index=$((index + 1))
+                continue
+              fi
+              LOCAL_RENDER_ARGS+=("${arg}")
+            done
+            RENDER_ARGS=("${LOCAL_RENDER_ARGS[@]}")
+          fi
+
           while IFS= read -r kv; do
             [ -z "$kv" ] && continue
             RENDER_ARGS+=(--set "$kv")

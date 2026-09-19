@@ -529,16 +529,20 @@ jobs:
               --set "blueGreen.overlapSeconds=${OVERLAP_SECONDS}"
               --set "image.repository=${TOP_REPO}"
               --set "image.tag=${TOP_TAG}"
-              --set "image.digest=${TOP_DIGEST}"
               --set "blueGreen.blue.image.repository=${BLUE_REPO}"
               --set "blueGreen.blue.image.tag=${BLUE_TAG}"
-              --set "blueGreen.blue.image.digest=${BLUE_DIGEST}"
               --set "blueGreen.blue.replicas=${BLUE_REPLICAS}"
               --set "blueGreen.green.image.repository=${GREEN_REPO}"
               --set "blueGreen.green.image.tag=${GREEN_TAG}"
-              --set "blueGreen.green.image.digest=${GREEN_DIGEST}"
               --set "blueGreen.green.replicas=${GREEN_REPLICAS}"
             )
+            if [ "${USE_LOCAL_CHART}" != "true" ]; then
+              RENDER_ARGS+=(
+                --set "image.digest=${TOP_DIGEST}"
+                --set "blueGreen.blue.image.digest=${BLUE_DIGEST}"
+                --set "blueGreen.green.image.digest=${GREEN_DIGEST}"
+              )
+            fi
             # Only force the preview on: leaving it unset lets the values file decide.
             if [ "${PREVIEW}" == "true" ]; then
               RENDER_ARGS+=(--set "blueGreen.preview.enabled=true")

@@ -272,8 +272,10 @@ jobs:
             -f "${VALUES_FILE}"
             --set "image.repository=${IMAGE_REPO}"
             --set "image.tag=${IMAGE_TAG}"
-            --set "image.digest=${IMAGE_DIGEST}"
           )
+          if [ "${USE_LOCAL_CHART}" != "true" ]; then
+            RENDER_ARGS+=(--set "image.digest=${IMAGE_DIGEST}")
+          fi
 
           case "${MIGRATIONS}" in
             "") ;;
