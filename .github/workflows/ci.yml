@@ -104,7 +104,16 @@ jobs:
             --set serviceAccount.create=true \
             --set autoscaling.enabled=true \
             --set podDisruptionBudget.enabled=true \
-            --set networkPolicy.enabled=true > /dev/null
+            --set networkPolicy.enabled=true \
+            --set podSecurityContext.runAsNonRoot=true \
+            --set podSecurityContext.runAsUser=10001 \
+            --set podSecurityContext.seccompProfile.type=RuntimeDefault \
+            --set securityContext.allowPrivilegeEscalation=false \
+            --set securityContext.readOnlyRootFilesystem=true \
+            --set 'securityContext.capabilities.drop[0]=ALL' > /dev/null
+
+      - name: Test chart security contexts
+        run: bash tests/chart-security-contexts.sh
 
       - name: Render chart in canary mode
         run: |

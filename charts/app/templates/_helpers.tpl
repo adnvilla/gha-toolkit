@@ -140,8 +140,8 @@ Usage: include "app.job.fullname" (dict "root" . "name" "migrate" "suffix" "abc1
 {{- end -}}
 
 {{/*
-Shared Pod spec for Job/CronJob workloads. Inherits image/env/envFrom/resources and the
-scheduling blocks from the top-level values; every field is overridable per job.
+Shared Pod spec for Job/CronJob workloads. Inherits image/env/envFrom/resources/security
+contexts and scheduling blocks from the top-level values; every field is overridable per job.
 Usage: include "app.job.podSpec" (dict "root" $ "job" $jobValues) | nindent <n>
 */}}
 {{- define "app.job.podSpec" -}}
@@ -158,6 +158,8 @@ Usage: include "app.job.podSpec" (dict "root" $ "job" $jobValues) | nindent <n>
 {{- $env := concat ($root.Values.env | default list) ($job.env | default list) -}}
 {{- $envFrom := concat ($root.Values.envFrom | default list) ($job.envFrom | default list) -}}
 {{- $resources := $job.resources | default $root.Values.resources -}}
+{{- $podSecurityContext := $job.podSecurityContext | default $root.Values.podSecurityContext -}}
+{{- $securityContext := $job.securityContext | default $root.Values.securityContext -}}
 {{- $affinity := $job.affinity | default $root.Values.affinity -}}
 {{- $tolerations := $job.tolerations | default $root.Values.tolerations -}}
 {{- $nodeSelector := $job.nodeSelector | default $root.Values.nodeSelector -}}
@@ -183,10 +185,18 @@ tolerations:
 nodeSelector:
   {{- toYaml . | nindent 2 }}
 {{- end }}
+{{- with $podSecurityContext }}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 containers:
   - name: {{ $job.name | default "job" }}
     image: {{ include "app.imageRef" (dict "repository" $repo "tag" $tag "digest" $digest) | quote }}
     imagePullPolicy: {{ $pullPolicy }}
+    {{- with $securityContext }}
+    securityContext:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     {{- with $job.command }}
     command:
       {{- toYaml . | nindent 6 }}

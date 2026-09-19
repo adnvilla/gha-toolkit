@@ -65,10 +65,34 @@ the mode on a new release name, or delete the old Deployment/Service first (same
 
 ### Jobs, migrations and CronJobs
 
-Batch workloads reuse the same values as the app — image, `env`, `envFrom`, `resources`,
-`imagePullSecrets`, ServiceAccount and the scheduling blocks — and every field is overridable per
-job. Job pods carry a suffixed `app.kubernetes.io/instance` so the app Service can never select
-them.
+Batch workloads reuse the same values as the app — image, `env`, `envFrom`, `resources`, security
+contexts, `imagePullSecrets`, ServiceAccount and the scheduling blocks — and every field is
+overridable per job. Job pods carry a suffixed `app.kubernetes.io/instance` so the app Service can
+never select them.
+
+### Pod Security Standards
+
+`podSecurityContext` (pod-level) and `securityContext` (container-level) are raw pass-through
+blocks. They default to `{}` so upgrading the chart does not break images that currently run as
+root. For a namespace enforcing Kubernetes Pod Security Standards `restricted`, use values such as:
+
+```yaml
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+```
+
+The same values apply to rolling, canary and blue/green Deployments, Jobs, migration hooks and
+CronJobs. `job.*`, `migrations.*` and each `cronJobs[]` entry can override either block completely,
+just as they override `resources`. Confirm that the image can run as the selected non-root UID and
+does not need to write to its root filesystem before enabling this profile.
 
 - `job.*` — a single on-demand Job, default off. `k8s-job.yml` turns it on for one run via
   `--set` and appends `job.nameSuffix` (the run id) so repeat runs never collide.
@@ -111,6 +135,8 @@ Details worth knowing:
 | `env` | `[]` | List of `{ name, value }` env vars |
 | `envFrom` | `[]` | List of `envFrom` sources (`configMapRef`/`secretRef`), passed through as-is |
 | `resources` | 128Mi/100m requests, 256Mi/500m limits | Pod resource requests/limits |
+| `podSecurityContext` | `{}` | Pod-level security context, passed through as-is |
+| `securityContext` | `{}` | Container-level security context, passed through as-is |
 | `livenessProbe` | HTTP GET `/` on port `8080` | Passed through as-is — **not** derived from `containerPort` |
 | `readinessProbe` | HTTP GET `/` on port `8080` | Passed through as-is — **not** derived from `containerPort` |
 | `affinity` | `{}` | Passed through as-is to the pod spec |
@@ -159,6 +185,7 @@ Details worth knowing:
 | `job.command` / `job.args` | `[]` / `[]` | Container entrypoint / arguments |
 | `job.env` / `job.envFrom` | `[]` / `[]` | Appended to the top-level `env` / `envFrom` |
 | `job.resources` | `{}` | Falls back to the top-level `resources` |
+| `job.podSecurityContext` / `job.securityContext` | `{}` | Each falls back to its top-level counterpart; an entry overrides the whole block |
 | `job.restartPolicy` | `Never` | Pod restart policy |
 | `job.backoffLimit` | `0` | Job retries before it is marked failed |
 | `job.ttlSecondsAfterFinished` | `300` | Cluster-side cleanup delay after the Job finishes |
