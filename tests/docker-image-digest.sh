@@ -21,18 +21,37 @@ mkdir -p "${WORK_DIR}/bin"
 cat > "${WORK_DIR}/bin/docker" <<'SH'
 #!/usr/bin/env bash
 if [ "$1" = image ] && [ "$2" = inspect ]; then
-  printf '%s\n' \
-    'registry.example.com/unrelated@sha256:deadbeef' \
-    'registry.example.com/service@sha256:abcdef'
+  printf '%s\n' "${REPO_DIGESTS}"
   exit 0
 fi
 exit 64
 SH
 chmod +x "${WORK_DIR}/bin/docker"
 
-GITHUB_OUTPUT="${WORK_DIR}/output" PATH="${WORK_DIR}/bin:${PATH}" \
-  REGISTRY_IMAGE=registry.example.com/service SHORT_SHA=abc1234 bash "${WORK_DIR}/digest.sh"
+run_case() {
+  local name="$1"
+  local registry_image="$2"
+  local repo_digests="$3"
+  local expected_digest="$4"
 
-grep -Fxq 'digest=sha256:abcdef' "${WORK_DIR}/output"
-grep -Fxq 'image-digest-ref=registry.example.com/service@sha256:abcdef' "${WORK_DIR}/output"
+  : > "${WORK_DIR}/output"
+  GITHUB_OUTPUT="${WORK_DIR}/output" PATH="${WORK_DIR}/bin:${PATH}" \
+    REGISTRY_IMAGE="${registry_image}" REPO_DIGESTS="${repo_digests}" SHORT_SHA=abc1234 \
+    bash "${WORK_DIR}/digest.sh"
+
+  grep -Fxq "digest=${expected_digest}" "${WORK_DIR}/output"
+  grep -Fxq "image-digest-ref=${registry_image}@${expected_digest}" "${WORK_DIR}/output"
+  echo "-- ${name}"
+}
+
+run_case \
+  "selects the requested registry repository" \
+  "registry.example.com/service" \
+  $'registry.example.com/unrelated@sha256:deadbeef\nregistry.example.com/service@sha256:abcdef' \
+  "sha256:abcdef"
+run_case \
+  "accepts Docker Hub normalized RepoDigests" \
+  "docker.io/org/service" \
+  $'other/service@sha256:deadbeef\norg/service@sha256:abcdef' \
+  "sha256:abcdef"
 echo "docker image digest output is immutable and correctly exposed"

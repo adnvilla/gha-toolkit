@@ -213,20 +213,21 @@ jobs:
           REGISTRY_IMAGE: ${{ inputs.registry-host }}/${{ inputs.image-name }}
           SHORT_SHA: ${{ steps.tags.outputs.short-sha }}
         run: |
-          IMAGE_DIGEST_REF=""
+          NORMALIZED_REGISTRY_IMAGE="${REGISTRY_IMAGE#docker.io/}"
+          IMAGE_DIGEST=""
           while IFS= read -r candidate; do
             case "${candidate}" in
-              "${REGISTRY_IMAGE}"@sha256:*)
-                IMAGE_DIGEST_REF="${candidate}"
+              "${REGISTRY_IMAGE}"@sha256:*|"${NORMALIZED_REGISTRY_IMAGE}"@sha256:*)
+                IMAGE_DIGEST="${candidate#*@}"
                 break
                 ;;
             esac
           done < <(docker image inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${REGISTRY_IMAGE}:${SHORT_SHA}")
-          if [[ "${IMAGE_DIGEST_REF}" != "${REGISTRY_IMAGE}@sha256:"* ]]; then
-            echo "::error::Expected a sha256 RepoDigest for ${REGISTRY_IMAGE}:${SHORT_SHA}, got '${IMAGE_DIGEST_REF}'"
+          if [[ "${IMAGE_DIGEST}" != sha256:* ]]; then
+            echo "::error::Expected a sha256 RepoDigest for ${REGISTRY_IMAGE}:${SHORT_SHA}, got '${IMAGE_DIGEST}'"
             exit 1
           fi
           {
-            echo "digest=${IMAGE_DIGEST_REF#*@}"
-            echo "image-digest-ref=${IMAGE_DIGEST_REF}"
+            echo "digest=${IMAGE_DIGEST}"
+            echo "image-digest-ref=${REGISTRY_IMAGE}@${IMAGE_DIGEST}"
           } >> "${GITHUB_OUTPUT}"
