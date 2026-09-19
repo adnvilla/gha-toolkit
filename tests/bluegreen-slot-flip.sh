@@ -132,6 +132,32 @@ cat > "${GREEN_ACTIVE_DIGEST_VALUES}" <<'JSON'
 }
 JSON
 
+GREEN_ACTIVE_REPOSITORY_ONLY_VALUES="${WORK_DIR}/green-active-repository-only.json"
+cat > "${GREEN_ACTIVE_REPOSITORY_ONLY_VALUES}" <<'JSON'
+{
+  "image": {
+    "repository": "registry.example.com/worker",
+    "digest": "sha256:stable"
+  },
+  "blueGreen": {
+    "activeSlot": "green",
+    "blue": {
+      "replicas": 0,
+      "image": {
+        "repository": "registry.example.com/worker",
+        "tag": "v0"
+      }
+    },
+    "green": {
+      "replicas": 2,
+      "image": {
+        "repository": "registry.example.com/green-worker"
+      }
+    }
+  }
+}
+JSON
+
 HELM_ARGS_FILE="${WORK_DIR}/helm-args.txt"
 HELM_CALLS_FILE="${WORK_DIR}/helm-calls.txt"
 HELM_COMMANDS_FILE="${WORK_DIR}/helm-commands.txt"
@@ -319,6 +345,28 @@ expect_success
 expect_step_output "image=registry.example.com/worker@sha256:active"
 expect_helm_set "blueGreen.blue.image.tag=v0"
 expect_helm_set "blueGreen.blue.image.digest="
+end_case
+
+reset_env
+begin_case "abort returns a usable tag for a repository-only active slot"
+LIVE_VALUES_FILE="${GREEN_ACTIVE_REPOSITORY_ONLY_VALUES}"
+ACTION=abort
+run_step
+expect_success
+expect_helm_set "image.repository=registry.example.com/green-worker"
+expect_helm_set "image.tag=latest"
+expect_helm_set "image.digest="
+expect_step_output "image=registry.example.com/green-worker:latest"
+end_case
+
+reset_env
+begin_case "status returns a usable tag for a repository-only active slot"
+LIVE_VALUES_FILE="${GREEN_ACTIVE_REPOSITORY_ONLY_VALUES}"
+ACTION=status
+run_step
+expect_success
+expect_helm_calls 0
+expect_step_output "image=registry.example.com/green-worker:latest"
 end_case
 
 reset_env

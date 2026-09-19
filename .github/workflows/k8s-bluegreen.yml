@@ -332,7 +332,7 @@ jobs:
           blue = (bg.get("blue") or {}).get("image") or {}
           green = (bg.get("green") or {}).get("image") or {}
           fallback_repo = img.get("repository") or ""
-          fallback_tag = img.get("tag") or ""
+          fallback_tag = img.get("tag") or "latest"
           fallback_digest = img.get("digest") or ""
           def image_parts(slot):
               slot_repo = slot.get("repository") or ""

@@ -108,6 +108,21 @@ cat > "${VALUES_WITH_DIGEST_ONLY_CANARY}" <<'JSON'
 }
 JSON
 
+VALUES_WITH_REPOSITORY_ONLY_CANARY="${WORK_DIR}/values-with-repository-only-canary.json"
+cat > "${VALUES_WITH_REPOSITORY_ONLY_CANARY}" <<'JSON'
+{
+  "image": {
+    "repository": "registry.example.com/service",
+    "digest": "sha256:stable"
+  },
+  "canary": {
+    "image": {
+      "repository": "registry.example.com/canary"
+    }
+  }
+}
+JSON
+
 HELM_ARGS_FILE="${WORK_DIR}/helm-args.txt"
 HELM_CALLS_FILE="${WORK_DIR}/helm-calls.txt"
 KUBECTL_CALLS_FILE="${WORK_DIR}/kubectl-calls.txt"
@@ -244,6 +259,20 @@ expect_success
 expect_helm_set "canary.image.repository=registry.example.com/service"
 expect_helm_set "canary.image.digest=sha256:canary"
 expect_step_output "image=registry.example.com/service@sha256:canary"
+end_case
+
+begin_case "abort gives a repository-only canary image a usable tag"
+ACTION=abort
+IMAGE=""
+STABLE_IMAGE_INPUT=""
+FAKE_RELEASE_EXISTS=true
+FAKE_VALUES_FILE="${VALUES_WITH_REPOSITORY_ONLY_CANARY}"
+run_step
+expect_success
+expect_helm_set "canary.image.repository=registry.example.com/canary"
+expect_helm_set "canary.image.tag=latest"
+expect_helm_set "canary.image.digest="
+expect_step_output "image=registry.example.com/canary:latest"
 end_case
 
 begin_case "explicit stable-image wins over the current release"

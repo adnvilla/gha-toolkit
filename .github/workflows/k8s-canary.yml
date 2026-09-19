@@ -261,7 +261,7 @@ jobs:
           img = v.get("image") or {}
           cimg = (v.get("canary") or {}).get("image") or {}
           fallback_repo = img.get("repository") or ""
-          fallback_tag = img.get("tag") or ""
+          fallback_tag = img.get("tag") or "latest"
           fallback_digest = img.get("digest") or ""
           canary_repo = cimg.get("repository") or ""
           canary_tag = cimg.get("tag") or ""
