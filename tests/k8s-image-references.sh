@@ -198,6 +198,16 @@ expect_chart_image \
   "${canary_rendered}" \
   "registry.example.com/canary:v2"
 
+canary_repository_only_rendered="$(helm template child-digest-canary-repository-only charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set strategy.mode=canary \
+  --set canary.image.repository=registry.example.com/canary)"
+expect_chart_image \
+  "canary repository-only child override keeps a usable tag" \
+  "${canary_repository_only_rendered}" \
+  "registry.example.com/canary:latest"
+
 bluegreen_rendered="$(helm template child-digest-bluegreen charts/app \
   --set image.repository=registry.example.com/stable \
   --set image.digest=sha256:stable \
@@ -214,6 +224,21 @@ expect_chart_image \
   "blue-green tagged child override" \
   "${bluegreen_rendered}" \
   "registry.example.com/green:v2"
+
+bluegreen_repository_only_rendered="$(helm template child-digest-bluegreen-repository-only charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set strategy.mode=blueGreen \
+  --set blueGreen.blue.image.repository=registry.example.com/blue \
+  --set blueGreen.green.image.repository=registry.example.com/green)"
+expect_chart_image \
+  "blue-green blue repository-only override keeps a usable tag" \
+  "${bluegreen_repository_only_rendered}" \
+  "registry.example.com/blue:latest"
+expect_chart_image \
+  "blue-green green repository-only override keeps a usable tag" \
+  "${bluegreen_repository_only_rendered}" \
+  "registry.example.com/green:latest"
 
 job_rendered="$(helm template child-digest-job charts/app \
   --set image.repository=registry.example.com/stable \

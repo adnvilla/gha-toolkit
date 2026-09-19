@@ -1,6 +1,6 @@
 {{- if eq (include "app.strategyMode" .) "canary" -}}
 {{- $canaryRepo := .Values.canary.image.repository | default .Values.image.repository -}}
-{{- $canaryTag := .Values.canary.image.tag | default .Values.image.tag -}}
+{{- $canaryTag := .Values.canary.image.tag | default .Values.image.tag | default "latest" -}}
 {{- $canaryDigest := .Values.canary.image.digest -}}
 {{- if and (not .Values.canary.image.repository) (not .Values.canary.image.tag) (not $canaryDigest) -}}
 {{- $canaryDigest = .Values.image.digest -}}
