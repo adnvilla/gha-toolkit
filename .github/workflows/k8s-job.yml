@@ -292,6 +292,11 @@ jobs:
               IMAGE_REPO="${IMAGE%:*}"
               IMAGE_TAG="${IMAGE##*:}"
             fi
+            if [ "${USE_LOCAL_CHART}" == "true" ] && [ -n "${IMAGE_DIGEST}" ]; then
+              IMAGE_REPO="${IMAGE%:*}"
+              IMAGE_TAG="${IMAGE##*:}"
+              IMAGE_DIGEST=""
+            fi
             RENDER_ARGS+=(--set "image.repository=${IMAGE_REPO}")
             RENDER_ARGS+=(--set "image.tag=${IMAGE_TAG}")
             RENDER_ARGS+=(--set "image.digest=${IMAGE_DIGEST}")

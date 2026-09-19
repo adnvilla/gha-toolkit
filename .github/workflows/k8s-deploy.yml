@@ -236,6 +236,11 @@ jobs:
             IMAGE_REPO="${IMAGE%:*}"
             IMAGE_TAG="${IMAGE##*:}"
           fi
+          if [ "${USE_LOCAL_CHART}" == "true" ] && [ -n "${IMAGE_DIGEST}" ]; then
+            IMAGE_REPO="${IMAGE%:*}"
+            IMAGE_TAG="${IMAGE##*:}"
+            IMAGE_DIGEST=""
+          fi
 
           # Compose ingress.host = {prefix}.{INGRESS_BASE_DOMAIN} without clobbering
           # a host already in the values file. --set would always win over -f; an

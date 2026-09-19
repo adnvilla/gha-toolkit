@@ -375,6 +375,11 @@ jobs:
               IMAGE_REPO="${IMAGE%:*}"
               IMAGE_TAG="${IMAGE##*:}"
             fi
+            if [ "${USE_LOCAL_CHART}" == "true" ] && [ -n "${IMAGE_DIGEST}" ]; then
+              IMAGE_REPO="${IMAGE%:*}"
+              IMAGE_TAG="${IMAGE##*:}"
+              IMAGE_DIGEST=""
+            fi
           fi
 
           # Defaults when no prior release (dry-run / first install).

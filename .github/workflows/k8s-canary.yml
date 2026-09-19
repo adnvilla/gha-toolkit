@@ -303,6 +303,11 @@ jobs:
               PARSED_REPO="${ref%:*}"
               PARSED_TAG="${ref##*:}"
             fi
+            if [ "${USE_LOCAL_CHART}" == "true" ] && [ -n "${PARSED_DIGEST}" ]; then
+              PARSED_REPO="${ref%:*}"
+              PARSED_TAG="${ref##*:}"
+              PARSED_DIGEST=""
+            fi
           }
 
           image_ref() {

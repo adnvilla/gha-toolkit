@@ -296,7 +296,7 @@ jobs:
       namespace: my-api
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       canary-weight: 10
 ```
 
@@ -320,7 +320,7 @@ jobs:
       namespace: my-worker
       kube-context: local
       values-file: k8s/values-worker.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       preview: true                                 # Optional: expose the inactive slot
       verify-url: https://preview.api.example.com/healthz  # Optional health gate
       auto-abort: true                              # Optional: roll the slot back if it fails
@@ -368,7 +368,7 @@ jobs:
       namespace: my-api
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       job-name: migrate
       command: |
         /app/bin/migrate
