@@ -114,7 +114,8 @@ on:
 1. **semantic-release:**
    - Checks out repository with full history (`fetch-depth: 0`)
    - Sets up Node.js environment
-   - Installs pinned semantic-release majors (+ changelog/git plugins) via `npm install -g`
+   - Checks out the toolkit at `job.workflow_sha` and installs its locked release toolchain with
+     `npm ci --ignore-scripts`
    - Analyzes commits to determine version
    - Creates tags and GitHub releases
 
@@ -123,15 +124,16 @@ on:
 - Uses semantic-release plugins for automation
 - Supports dry-run for testing
 - Requires explicit token passing (security)
-- Pins package majors in the install step so a breaking upstream release cannot silently
-  break every consumer; bump the pins deliberately when adopting a new major
+- Couples the workflow to `tools/release/package-lock.json` at the same immutable toolkit SHA;
+  Dependabot proposes grouped npm updates and `--ignore-scripts` prevents dependency lifecycle
+  scripts from running during installation
 
-**Dependencies** (installed ad hoc by the workflow, no committed `package.json`):
+**Dependencies** (locked in `tools/release/package-lock.json`):
 ```text
-semantic-release@^25
-@semantic-release/git@^10
-@semantic-release/changelog@^6
-conventional-changelog-conventionalcommits@^10
+semantic-release@25.0.9
+@semantic-release/git@10.0.1
+@semantic-release/changelog@6.0.3
+conventional-changelog-conventionalcommits@9.3.1
 ```
 
 (`@semantic-release/commit-analyzer`, `release-notes-generator`, and `github` ship with

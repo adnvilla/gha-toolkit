@@ -3,8 +3,9 @@
 # GitHub's April 2026 addition of job.workflow_ref / job.workflow_sha /
 # job.workflow_repository / job.workflow_file_path, so it reports them as
 # undefined properties. They are valid and load-bearing: the k8s workflows use
-# them to check out charts/app from the toolkit repo at the exact ref the caller
-# pinned, which is also what keeps forks working without modification.
+# them to check out charts/app, and release.yml uses them to check out the locked
+# release toolchain, from the toolkit repo at the exact ref the caller pinned.
+# This also keeps forks working without modification.
 # Verified empirically in gha-toolkit run 30165776297 and navi-admin run
 # 29677058548. See https://github.com/orgs/community/discussions/113568 and the
 # closing comments on issues #29 / #30 — this false positive already caused one
@@ -18,5 +19,8 @@
 # resolved as '../repo/...') stops matching and the false positives come back.
 paths:
   .github/workflows/k8s-*.yml:
+    ignore:
+      - 'property "workflow_(ref|sha|repository|file_path)" is not defined in object type'
+  .github/workflows/release.yml:
     ignore:
       - 'property "workflow_(ref|sha|repository|file_path)" is not defined in object type'

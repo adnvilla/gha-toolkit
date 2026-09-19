@@ -282,6 +282,9 @@ jobs:
       - name: Test release rules release breaking changes as major
         run: bash tests/release-rules.sh
 
+      - name: Test locked release toolchain
+        run: bash tests/release-toolchain.sh
+
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest
