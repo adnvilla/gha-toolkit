@@ -1,3 +1,9 @@
+## [2.2.0](https://github.com/adnvilla/gha-toolkit/compare/v2.1.0...v2.2.0) (2026-09-19)
+
+### 🚀 Features
+
+* add chart security context overrides ([819673b](https://github.com/adnvilla/gha-toolkit/commit/819673bc7d8cc7eb20bada07ecd0beeb24f29bdd))
+
 ## [2.1.0](https://github.com/adnvilla/gha-toolkit/compare/v2.0.1...v2.1.0) (2026-09-19)
 
 ### 🚀 Features
