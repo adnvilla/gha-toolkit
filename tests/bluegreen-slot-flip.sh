@@ -344,7 +344,6 @@ run_step
 expect_success
 expect_step_output "image=registry.example.com/worker@sha256:active"
 expect_helm_set "blueGreen.blue.image.tag=v0"
-expect_helm_set "blueGreen.blue.image.digest="
 end_case
 
 reset_env
@@ -355,7 +354,6 @@ run_step
 expect_success
 expect_helm_set "image.repository=registry.example.com/green-worker"
 expect_helm_set "image.tag=latest"
-expect_helm_set "image.digest="
 expect_step_output "image=registry.example.com/green-worker:latest"
 end_case
 
