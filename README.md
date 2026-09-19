@@ -261,13 +261,15 @@ jobs:
       namespace: my-app
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       # environment defaults to 'production' — set explicitly for a staging deploy,
       # see ENVIRONMENTS.md
 ```
 
-The Kubernetes workflows accept tagged references, digest references, and registries with a port.
-An image reference without an explicit tag uses `latest`.
+The build workflow exposes both `image` (the compatibility tag) and `image-digest-ref` after a push.
+Use `image-digest-ref` for staging and production: Kubernetes renders it as `repository@sha256:...`,
+which identifies immutable bytes. The Kubernetes workflows also accept tagged references and registries
+with a port. `extra-tags` remains `latest` for v1 compatibility; its removal is planned for v2.
 
 HTTP apps can omit `ingress.host` from values and pass `ingress-prefix` (defaults to `release-name`).
 The workflow composes `ingress.host={prefix}.{INGRESS_BASE_DOMAIN}` from the caller repo/environment

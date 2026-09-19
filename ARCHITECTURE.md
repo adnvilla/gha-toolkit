@@ -290,6 +290,10 @@ on:
   before building (only relevant when `push` is true; default: false)
 - `push` (boolean): Set to false to only validate that the image builds, without publishing
   (default: true)
+- Outputs: `image` (short-SHA tag for compatibility), `digest` and `image-digest-ref` after a push.
+  Production deploys should consume `image-digest-ref` so the manifest names immutable bytes.
+- `extra-tags` remains `latest` in v1 for backward compatibility; removing that default is a v2
+  breaking change and is deliberately deferred.
 - `runs-on` (string, default `ubuntu-latest`)
 
 **Secrets (optional):**
@@ -374,8 +378,9 @@ on:
    - Selects the `kube-context` (skipped entirely when `dry-run` is true)
    - If `adopt-existing`, deletes any pre-existing `deployment`/`service`/`ingress` matching
      `release-name` in `namespace`
-   - Splits `image` into `image.repository`/`image.tag` (using `latest` when the reference
-     contains no colon). When `ingress-prefix` (or `release-name`) and `INGRESS_BASE_DOMAIN`
+   - Splits tagged images into `image.repository`/`image.tag`, and digest images into
+     `image.repository`/`image.digest`; the chart renders digest images as `repository@digest`.
+     Untagged references retain the `latest` fallback. When `ingress-prefix` (or `release-name`) and `INGRESS_BASE_DOMAIN`
      are both set, writes a small extra values file with `ingress.host` and passes it *before*
      `-f <values-file>` so Helm's merge keeps a host already present in values (including an
      explicit empty string). `--set` is not used for this — it would always clobber.

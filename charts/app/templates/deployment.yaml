@@ -45,7 +45,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ include "app.name" . }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "app.imageRef" .Values.image | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

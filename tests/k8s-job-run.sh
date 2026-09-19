@@ -280,10 +280,16 @@ expect_helm_arg() {
 # contract the other k8s workflows keep for tagless and digest references (see
 # tests/k8s-image-references.sh), not a specific repository/tag split.
 expect_image_roundtrip() {
-  local repo tag
+  local repo tag digest actual
   repo="$(sed -n 's/^image\.repository=//p' "${HELM_ARGS_FILE}")"
   tag="$(sed -n 's/^image\.tag=//p' "${HELM_ARGS_FILE}")"
-  [ "${repo}:${tag}" = "$1" ] || fail "image sets recompose to '${repo}:${tag}', expected '$1'"
+  digest="$(sed -n 's/^image\.digest=//p' "${HELM_ARGS_FILE}")"
+  if [ -n "${digest}" ]; then
+    actual="${repo}@${digest}"
+  else
+    actual="${repo}:${tag}"
+  fi
+  [ "${actual}" = "$1" ] || fail "image sets recompose to '${actual}', expected '$1'"
 }
 
 expect_step_output() {

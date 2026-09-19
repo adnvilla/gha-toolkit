@@ -86,6 +86,12 @@ on:
       image:
         description: 'Full image reference (registry-host/image-name:short-sha)'
         value: ${{ jobs.build.outputs.image }}
+      digest:
+        description: 'Pushed image digest (sha256:...) when push is true; empty otherwise'
+        value: ${{ jobs.build.outputs.digest }}
+      image-digest-ref:
+        description: 'Immutable pushed image reference (registry-host/image-name@sha256:...) when push is true; empty otherwise'
+        value: ${{ jobs.build.outputs.image-digest-ref }}
       short-sha:
         description: 'The short commit SHA used as the primary tag'
         value: ${{ jobs.build.outputs.short-sha }}
@@ -101,6 +107,8 @@ jobs:
     outputs:
       image: ${{ steps.tags.outputs.image }}
       short-sha: ${{ steps.tags.outputs.short-sha }}
+      digest: ${{ steps.digest.outputs.digest }}
+      image-digest-ref: ${{ steps.digest.outputs.image-digest-ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -197,3 +205,20 @@ jobs:
             [ -z "$tag" ] && continue
             docker push "${REGISTRY_IMAGE}:${tag}"
           done <<< "$EXTRA_TAGS"
+
+      - name: Resolve pushed image digest
+        id: digest
+        if: ${{ inputs.push }}
+        env:
+          REGISTRY_IMAGE: ${{ inputs.registry-host }}/${{ inputs.image-name }}
+          SHORT_SHA: ${{ steps.tags.outputs.short-sha }}
+        run: |
+          IMAGE_DIGEST_REF="$(docker image inspect --format='{{index .RepoDigests 0}}' "${REGISTRY_IMAGE}:${SHORT_SHA}")"
+          if [[ "${IMAGE_DIGEST_REF}" != "${REGISTRY_IMAGE}@sha256:"* ]]; then
+            echo "::error::Expected a sha256 RepoDigest for ${REGISTRY_IMAGE}:${SHORT_SHA}, got '${IMAGE_DIGEST_REF}'"
+            exit 1
+          fi
+          {
+            echo "digest=${IMAGE_DIGEST_REF#*@}"
+            echo "image-digest-ref=${IMAGE_DIGEST_REF}"
+          } >> "${GITHUB_OUTPUT}"

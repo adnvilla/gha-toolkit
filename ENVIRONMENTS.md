@@ -107,7 +107,7 @@ jobs:
       namespace: my-app-staging
       kube-context: local
       values-file: k8s/values-staging.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
 ```
 
 `k8s/values-staging.yaml` is a second values file next to your existing `values-local.yaml` — same

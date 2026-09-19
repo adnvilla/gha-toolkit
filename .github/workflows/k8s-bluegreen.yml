@@ -333,11 +333,14 @@ jobs:
           green = (bg.get("green") or {}).get("image") or {}
           fallback_repo = img.get("repository") or ""
           fallback_tag = img.get("tag") or ""
+          fallback_digest = img.get("digest") or ""
           print("ACTIVE_SLOT=%r" % active)
           print("BLUE_REPO=%r" % (blue.get("repository") or fallback_repo))
           print("BLUE_TAG=%r" % (blue.get("tag") or fallback_tag))
+          print("BLUE_DIGEST=%r" % (blue.get("digest") or fallback_digest))
           print("GREEN_REPO=%r" % (green.get("repository") or fallback_repo))
           print("GREEN_TAG=%r" % (green.get("tag") or fallback_tag))
+          print("GREEN_DIGEST=%r" % (green.get("digest") or fallback_digest))
           PY
           )"
 
@@ -349,10 +352,15 @@ jobs:
 
           IMAGE_REPO=""
           IMAGE_TAG=""
+          IMAGE_DIGEST=""
           if [ -n "${IMAGE}" ]; then
             IMAGE_REPO="${IMAGE}"
             IMAGE_TAG="latest"
-            if [[ "${IMAGE}" == *:* ]]; then
+            if [[ "${IMAGE}" == *@* ]]; then
+              IMAGE_REPO="${IMAGE%@*}"
+              IMAGE_TAG=""
+              IMAGE_DIGEST="${IMAGE#*@}"
+            elif [[ "${IMAGE}" == *:* ]]; then
               IMAGE_REPO="${IMAGE%:*}"
               IMAGE_TAG="${IMAGE##*:}"
             fi
@@ -362,27 +370,34 @@ jobs:
           if [ -z "${BLUE_REPO}" ] && [ -n "${IMAGE_REPO}" ]; then
             BLUE_REPO="${IMAGE_REPO}"
             BLUE_TAG="${IMAGE_TAG}"
+            BLUE_DIGEST="${IMAGE_DIGEST}"
           fi
           if [ -z "${GREEN_REPO}" ] && [ -n "${IMAGE_REPO}" ]; then
             GREEN_REPO="${IMAGE_REPO}"
             GREEN_TAG="${IMAGE_TAG}"
+            GREEN_DIGEST="${IMAGE_DIGEST}"
           fi
 
           # status is read-only: report the slots and the live image, touch nothing.
           if [ "${ACTION}" == "status" ]; then
             if [ "${ACTIVE_SLOT}" = "blue" ]; then
-              LIVE_REPO="${BLUE_REPO}"; LIVE_TAG="${BLUE_TAG}"
+              LIVE_REPO="${BLUE_REPO}"; LIVE_TAG="${BLUE_TAG}"; LIVE_DIGEST="${BLUE_DIGEST}"
             else
-              LIVE_REPO="${GREEN_REPO}"; LIVE_TAG="${GREEN_TAG}"
+              LIVE_REPO="${GREEN_REPO}"; LIVE_TAG="${GREEN_TAG}"; LIVE_DIGEST="${GREEN_DIGEST}"
             fi
-            echo "active slot: ${ACTIVE_SLOT} (${LIVE_REPO}:${LIVE_TAG})"
+            if [ -n "${LIVE_DIGEST}" ]; then
+              LIVE_IMAGE="${LIVE_REPO}@${LIVE_DIGEST}"
+            else
+              LIVE_IMAGE="${LIVE_REPO}:${LIVE_TAG}"
+            fi
+            echo "active slot: ${ACTIVE_SLOT} (${LIVE_IMAGE})"
             echo "inactive slot: ${INACTIVE_SLOT}"
             {
               echo "action=status"
               echo "active-slot=${ACTIVE_SLOT}"
               echo "inactive-slot=${INACTIVE_SLOT}"
               echo "deployed-slot="
-              echo "image=${LIVE_REPO}:${LIVE_TAG}"
+              echo "image=${LIVE_IMAGE}"
             } >> "${GITHUB_OUTPUT}"
             exit 0
           fi
@@ -403,10 +418,12 @@ jobs:
               if [ "${INACTIVE_SLOT}" = "green" ]; then
                 GREEN_REPO="${IMAGE_REPO}"
                 GREEN_TAG="${IMAGE_TAG}"
+                GREEN_DIGEST="${IMAGE_DIGEST}"
                 GREEN_REPLICAS="${INACTIVE_REPLICAS}"
               else
                 BLUE_REPO="${IMAGE_REPO}"
                 BLUE_TAG="${IMAGE_TAG}"
+                BLUE_DIGEST="${IMAGE_DIGEST}"
                 BLUE_REPLICAS="${INACTIVE_REPLICAS}"
               fi
               # Active slot keeps consuming; do not change its replicas/image here.
@@ -421,9 +438,9 @@ jobs:
               NEW_ACTIVE="${INACTIVE_SLOT}"
               if [ -n "${IMAGE_REPO}" ]; then
                 if [ "${INACTIVE_SLOT}" = "green" ]; then
-                  GREEN_REPO="${IMAGE_REPO}"; GREEN_TAG="${IMAGE_TAG}"
+                  GREEN_REPO="${IMAGE_REPO}"; GREEN_TAG="${IMAGE_TAG}"; GREEN_DIGEST="${IMAGE_DIGEST}"
                 else
-                  BLUE_REPO="${IMAGE_REPO}"; BLUE_TAG="${IMAGE_TAG}"
+                  BLUE_REPO="${IMAGE_REPO}"; BLUE_TAG="${IMAGE_TAG}"; BLUE_DIGEST="${IMAGE_DIGEST}"
                 fi
               fi
               if [ "${OVERLAP_SECONDS}" -gt 0 ] && [ "${DRY_RUN}" != "true" ]; then
@@ -461,8 +478,10 @@ jobs:
           # Top-level image mirrors the active slot (useful for tooling/docs).
           if [ "${NEW_ACTIVE}" = "blue" ]; then
             TOP_REPO="${BLUE_REPO}"; TOP_TAG="${BLUE_TAG}"
+            TOP_DIGEST="${BLUE_DIGEST}"
           else
             TOP_REPO="${GREEN_REPO}"; TOP_TAG="${GREEN_TAG}"
+            TOP_DIGEST="${GREEN_DIGEST}"
           fi
 
           # Same ingress.host composition as k8s-deploy.yml: extra -f before the
@@ -494,11 +513,14 @@ jobs:
               --set "blueGreen.overlapSeconds=${OVERLAP_SECONDS}"
               --set "image.repository=${TOP_REPO}"
               --set "image.tag=${TOP_TAG}"
+              --set "image.digest=${TOP_DIGEST}"
               --set "blueGreen.blue.image.repository=${BLUE_REPO}"
               --set "blueGreen.blue.image.tag=${BLUE_TAG}"
+              --set "blueGreen.blue.image.digest=${BLUE_DIGEST}"
               --set "blueGreen.blue.replicas=${BLUE_REPLICAS}"
               --set "blueGreen.green.image.repository=${GREEN_REPO}"
               --set "blueGreen.green.image.tag=${GREEN_TAG}"
+              --set "blueGreen.green.image.digest=${GREEN_DIGEST}"
               --set "blueGreen.green.replicas=${GREEN_REPLICAS}"
             )
             # Only force the preview on: leaving it unset lets the values file decide.
