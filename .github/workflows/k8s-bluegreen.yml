@@ -615,7 +615,11 @@ jobs:
 
           OUT_IMAGE="${IMAGE}"
           if [ -z "${OUT_IMAGE}" ]; then
-            OUT_IMAGE="${TOP_REPO}:${TOP_TAG}"
+            if [ -n "${TOP_DIGEST}" ]; then
+              OUT_IMAGE="${TOP_REPO}@${TOP_DIGEST}"
+            else
+              OUT_IMAGE="${TOP_REPO}:${TOP_TAG}"
+            fi
           fi
 
           {

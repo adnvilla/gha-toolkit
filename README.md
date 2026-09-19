@@ -209,7 +209,7 @@ insecure registries need neither.
 ```yaml
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app
@@ -226,7 +226,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app
@@ -246,7 +246,7 @@ see [ENVIRONMENTS.md](ENVIRONMENTS.md).
 ```yaml
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app

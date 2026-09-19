@@ -86,7 +86,7 @@ concurrency:
 
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.3.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       # pull_request's own GITHUB_SHA is a synthetic merge commit, not the PR's real head —
       # pass it explicitly so the image is built from the code actually under review.

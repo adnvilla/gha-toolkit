@@ -150,7 +150,10 @@ Usage: include "app.job.podSpec" (dict "root" $ "job" $jobValues) | nindent <n>
 {{- $img := $job.image | default dict -}}
 {{- $repo := $img.repository | default $root.Values.image.repository -}}
 {{- $tag := $img.tag | default $root.Values.image.tag -}}
-{{- $digest := $img.digest | default $root.Values.image.digest -}}
+{{- $digest := $img.digest -}}
+{{- if and (not $img.repository) (not $img.tag) (not $digest) -}}
+{{- $digest = $root.Values.image.digest -}}
+{{- end -}}
 {{- $pullPolicy := $img.pullPolicy | default $root.Values.image.pullPolicy -}}
 {{- $env := concat ($root.Values.env | default list) ($job.env | default list) -}}
 {{- $envFrom := concat ($root.Values.envFrom | default list) ($job.envFrom | default list) -}}
