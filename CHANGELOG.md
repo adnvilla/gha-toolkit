@@ -1,3 +1,9 @@
+## [2.0.1](https://github.com/adnvilla/gha-toolkit/compare/v2.0.0...v2.0.1) (2026-09-19)
+
+### 🐛 Bug Fixes
+
+* lock semantic release toolchain ([8cd8d0c](https://github.com/adnvilla/gha-toolkit/commit/8cd8d0c67180aef3af9cbd7bbc1d7fda51c7553a))
+
 ## [2.0.0](https://github.com/adnvilla/gha-toolkit/compare/v1.9.3...v2.0.0) (2026-09-18)
 
 ### ⚠ BREAKING CHANGES
