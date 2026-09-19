@@ -151,6 +151,7 @@ bash tests/no-inline-run-expressions.sh
 bash tests/workflow-timeouts.sh
 bash tests/release-rules.sh
 bash tests/release-toolchain.sh
+bash tests/docker-image-digest.sh
 
 # 6. Release dry-run (optional; needs GITHUB_TOKEN)
 npm ci --ignore-scripts --prefix tools/release
@@ -355,6 +356,8 @@ Before considering a change complete:
       changed, so a breaking change still releases a major.
 - [ ] `bash tests/release-toolchain.sh` passes when `release.yml`, `tools/release/`, or Dependabot
       configuration changes, so the release runner remains locked and script-free.
+- [ ] `bash tests/docker-image-digest.sh` passes when `docker-build-push.yml` changes, so its immutable
+      image outputs remain valid for the configured registry.
 - [ ] `bash tests/k8s-image-references.sh` passes when Kubernetes image parsing changes.
 - [ ] `bash tests/ingress-host-composition.sh` passes when ingress host composition changes.
 - [ ] If the chart changed: both `helm template` renders pass, `Chart.yaml` version bumped if

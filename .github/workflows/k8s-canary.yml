@@ -260,17 +260,31 @@ jobs:
           v = json.loads(os.environ.get("VALUES_JSON") or "{}") or {}
           img = v.get("image") or {}
           cimg = (v.get("canary") or {}).get("image") or {}
+          fallback_repo = img.get("repository") or ""
+          fallback_tag = img.get("tag") or "latest"
+          fallback_digest = img.get("digest") or ""
+          canary_repo = cimg.get("repository") or ""
+          canary_tag = cimg.get("tag") or ""
+          canary_digest = cimg.get("digest") or ""
+          if not (canary_repo or canary_tag or canary_digest):
+              canary_digest = fallback_digest
           print("CUR_REPO=%r" % (img.get("repository") or ""))
           print("CUR_TAG=%r" % (img.get("tag") or ""))
-          print("CUR_CANARY_REPO=%r" % (cimg.get("repository") or ""))
-          print("CUR_CANARY_TAG=%r" % (cimg.get("tag") or ""))
+          print("CUR_DIGEST=%r" % (img.get("digest") or ""))
+          print("CUR_CANARY_REPO=%r" % (canary_repo or fallback_repo))
+          print("CUR_CANARY_TAG=%r" % (canary_tag or fallback_tag))
+          print("CUR_CANARY_DIGEST=%r" % canary_digest)
           PY
           )"
 
           # Resolve stable image: explicit input > current release > canary image (first install).
           STABLE_IMAGE="${STABLE_IMAGE_INPUT}"
-          if [ -z "${STABLE_IMAGE}" ] && [ -n "${CUR_REPO}" ] && [ -n "${CUR_TAG}" ]; then
-            STABLE_IMAGE="${CUR_REPO}:${CUR_TAG}"
+          if [ -z "${STABLE_IMAGE}" ] && [ -n "${CUR_REPO}" ]; then
+            if [ -n "${CUR_DIGEST}" ]; then
+              STABLE_IMAGE="${CUR_REPO}@${CUR_DIGEST}"
+            elif [ -n "${CUR_TAG}" ]; then
+              STABLE_IMAGE="${CUR_REPO}:${CUR_TAG}"
+            fi
           fi
           if [ -z "${STABLE_IMAGE}" ]; then
             STABLE_IMAGE="${IMAGE}"
@@ -280,22 +294,43 @@ jobs:
             local ref="$1"
             PARSED_REPO="${ref}"
             PARSED_TAG="latest"
-            if [[ "${ref}" == *:* ]]; then
+            PARSED_DIGEST=""
+            if [[ "${ref}" == *@* ]]; then
+              PARSED_REPO="${ref%@*}"
+              PARSED_TAG=""
+              PARSED_DIGEST="${ref#*@}"
+            elif [[ "${ref}" == *:* ]]; then
               PARSED_REPO="${ref%:*}"
               PARSED_TAG="${ref##*:}"
+            fi
+            if [ "${USE_LOCAL_CHART}" == "true" ] && [ -n "${PARSED_DIGEST}" ]; then
+              PARSED_REPO="${ref%:*}"
+              PARSED_TAG="${ref##*:}"
+              PARSED_DIGEST=""
+            fi
+          }
+
+          image_ref() {
+            if [ -n "$3" ]; then
+              printf '%s@%s' "$1" "$3"
+            else
+              printf '%s:%s' "$1" "$2"
             fi
           }
 
           split_image_ref "${STABLE_IMAGE}"
           STABLE_REPO="${PARSED_REPO}"
           STABLE_TAG="${PARSED_TAG}"
+          STABLE_DIGEST="${PARSED_DIGEST}"
 
           CANARY_REPO=""
           CANARY_TAG=""
+          CANARY_DIGEST=""
           if [ -n "${IMAGE}" ]; then
             split_image_ref "${IMAGE}"
             CANARY_REPO="${PARSED_REPO}"
             CANARY_TAG="${PARSED_TAG}"
+            CANARY_DIGEST="${PARSED_DIGEST}"
           fi
 
           # Same ingress.host composition as k8s-deploy.yml: extra -f before the
@@ -322,6 +357,7 @@ jobs:
             --set "strategy.mode=canary"
             --set "image.repository=${STABLE_REPO}"
             --set "image.tag=${STABLE_TAG}"
+            --set "image.digest=${STABLE_DIGEST}"
           )
 
           case "${ACTION}" in
@@ -329,6 +365,7 @@ jobs:
               RENDER_ARGS+=(
                 --set "canary.image.repository=${CANARY_REPO}"
                 --set "canary.image.tag=${CANARY_TAG}"
+                --set "canary.image.digest=${CANARY_DIGEST}"
                 --set "canary.replicas=${CANARY_REPLICAS}"
                 --set "canary.weight=${CANARY_WEIGHT}"
               )
@@ -340,8 +377,10 @@ jobs:
               RENDER_ARGS+=(
                 --set "image.repository=${CANARY_REPO}"
                 --set "image.tag=${CANARY_TAG}"
+                --set "image.digest=${CANARY_DIGEST}"
                 --set "canary.image.repository=${CANARY_REPO}"
                 --set "canary.image.tag=${CANARY_TAG}"
+                --set "canary.image.digest=${CANARY_DIGEST}"
                 --set "canary.replicas=0"
                 --set "canary.weight=0"
               )
@@ -350,27 +389,44 @@ jobs:
               ;;
             abort)
               # Keep stable; tear down canary. Prefer canary image from release if present.
-              if [ -z "${CANARY_REPO}" ] && [ -n "${CUR_CANARY_REPO}" ] && [ -n "${CUR_CANARY_TAG}" ]; then
+              if [ -z "${CANARY_REPO}" ] && [ -n "${CUR_CANARY_REPO}" ]; then
                 CANARY_REPO="${CUR_CANARY_REPO}"
                 CANARY_TAG="${CUR_CANARY_TAG}"
+                CANARY_DIGEST="${CUR_CANARY_DIGEST}"
               fi
               if [ -z "${CANARY_REPO}" ]; then
                 CANARY_REPO="${STABLE_REPO}"
                 CANARY_TAG="${STABLE_TAG}"
+                CANARY_DIGEST="${STABLE_DIGEST}"
               fi
               RENDER_ARGS+=(
                 --set "canary.image.repository=${CANARY_REPO}"
                 --set "canary.image.tag=${CANARY_TAG}"
+                --set "canary.image.digest=${CANARY_DIGEST}"
                 --set "canary.replicas=0"
                 --set "canary.weight=0"
               )
-              OUT_IMAGE="${CANARY_REPO}:${CANARY_TAG}"
+              OUT_IMAGE="$(image_ref "${CANARY_REPO}" "${CANARY_TAG}" "${CANARY_DIGEST}")"
               OUT_STABLE="${STABLE_IMAGE}"
               ;;
           esac
 
-          echo "Resolved stable image: ${STABLE_REPO}:${STABLE_TAG}"
-          echo "Resolved canary image: ${CANARY_REPO}:${CANARY_TAG}"
+          echo "Resolved stable image: $(image_ref "${STABLE_REPO}" "${STABLE_TAG}" "${STABLE_DIGEST}")"
+          echo "Resolved canary image: $(image_ref "${CANARY_REPO}" "${CANARY_TAG}" "${CANARY_DIGEST}")"
+
+          if [ "${USE_LOCAL_CHART}" == "true" ]; then
+            LOCAL_RENDER_ARGS=()
+            for ((index = 0; index < ${#RENDER_ARGS[@]}; index++)); do
+              arg="${RENDER_ARGS[index]}"
+              next="${RENDER_ARGS[index + 1]:-}"
+              if [ "${arg}" = "--set" ] && [[ "${next}" == image.digest=* || "${next}" == canary.image.digest=* ]]; then
+                index=$((index + 1))
+                continue
+              fi
+              LOCAL_RENDER_ARGS+=("${arg}")
+            done
+            RENDER_ARGS=("${LOCAL_RENDER_ARGS[@]}")
+          fi
 
           while IFS= read -r kv; do
             [ -z "$kv" ] && continue

@@ -1,6 +1,10 @@
 {{- if eq (include "app.strategyMode" .) "canary" -}}
 {{- $canaryRepo := .Values.canary.image.repository | default .Values.image.repository -}}
-{{- $canaryTag := .Values.canary.image.tag | default .Values.image.tag -}}
+{{- $canaryTag := .Values.canary.image.tag | default .Values.image.tag | default "latest" -}}
+{{- $canaryDigest := .Values.canary.image.digest -}}
+{{- if and (not .Values.canary.image.repository) (not .Values.canary.image.tag) (not $canaryDigest) -}}
+{{- $canaryDigest = .Values.image.digest -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -39,7 +43,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ include "app.name" . }}
-          image: "{{ $canaryRepo }}:{{ $canaryTag }}"
+          image: {{ include "app.imageRef" (dict "repository" $canaryRepo "tag" $canaryTag "digest" $canaryDigest) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

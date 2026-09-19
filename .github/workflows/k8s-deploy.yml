@@ -227,9 +227,19 @@ jobs:
 
           IMAGE_REPO="${IMAGE}"
           IMAGE_TAG="latest"
-          if [[ "${IMAGE}" == *:* ]]; then
+          IMAGE_DIGEST=""
+          if [[ "${IMAGE}" == *@* ]]; then
+            IMAGE_REPO="${IMAGE%@*}"
+            IMAGE_TAG=""
+            IMAGE_DIGEST="${IMAGE#*@}"
+          elif [[ "${IMAGE}" == *:* ]]; then
             IMAGE_REPO="${IMAGE%:*}"
             IMAGE_TAG="${IMAGE##*:}"
+          fi
+          if [ "${USE_LOCAL_CHART}" == "true" ] && [ -n "${IMAGE_DIGEST}" ]; then
+            IMAGE_REPO="${IMAGE%:*}"
+            IMAGE_TAG="${IMAGE##*:}"
+            IMAGE_DIGEST=""
           fi
 
           # Compose ingress.host = {prefix}.{INGRESS_BASE_DOMAIN} without clobbering
@@ -263,6 +273,9 @@ jobs:
             --set "image.repository=${IMAGE_REPO}"
             --set "image.tag=${IMAGE_TAG}"
           )
+          if [ "${USE_LOCAL_CHART}" != "true" ]; then
+            RENDER_ARGS+=(--set "image.digest=${IMAGE_DIGEST}")
+          fi
 
           case "${MIGRATIONS}" in
             "") ;;

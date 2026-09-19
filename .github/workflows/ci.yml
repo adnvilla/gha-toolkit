@@ -285,6 +285,9 @@ jobs:
       - name: Test locked release toolchain
         run: bash tests/release-toolchain.sh
 
+      - name: Test Docker image digest output
+        run: bash tests/docker-image-digest.sh
+
   validate-doc-pins:
     name: Validate Documentation Version Pins
     runs-on: ubuntu-latest

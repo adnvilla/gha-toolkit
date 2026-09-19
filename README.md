@@ -209,7 +209,7 @@ insecure registries need neither.
 ```yaml
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app
@@ -226,7 +226,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app
@@ -246,7 +246,7 @@ see [ENVIRONMENTS.md](ENVIRONMENTS.md).
 ```yaml
 jobs:
   build:
-    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@v1.2.0
+    uses: adnvilla/gha-toolkit/.github/workflows/docker-build-push.yml@master
     with:
       dockerfile: apps/web/Dockerfile
       image-name: my-app
@@ -261,13 +261,15 @@ jobs:
       namespace: my-app
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       # environment defaults to 'production' — set explicitly for a staging deploy,
       # see ENVIRONMENTS.md
 ```
 
-The Kubernetes workflows accept tagged references, digest references, and registries with a port.
-An image reference without an explicit tag uses `latest`.
+The build workflow exposes both `image` (the compatibility tag) and `image-digest-ref` after a push.
+Use `image-digest-ref` for staging and production: Kubernetes renders it as `repository@sha256:...`,
+which identifies immutable bytes. The Kubernetes workflows also accept tagged references and registries
+with a port. `extra-tags` remains `latest` for v2 compatibility; its removal is planned for v3.
 
 HTTP apps can omit `ingress.host` from values and pass `ingress-prefix` (defaults to `release-name`).
 The workflow composes `ingress.host={prefix}.{INGRESS_BASE_DOMAIN}` from the caller repo/environment
@@ -294,7 +296,7 @@ jobs:
       namespace: my-api
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       canary-weight: 10
 ```
 
@@ -318,7 +320,7 @@ jobs:
       namespace: my-worker
       kube-context: local
       values-file: k8s/values-worker.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       preview: true                                 # Optional: expose the inactive slot
       verify-url: https://preview.api.example.com/healthz  # Optional health gate
       auto-abort: true                              # Optional: roll the slot back if it fails
@@ -366,7 +368,7 @@ jobs:
       namespace: my-api
       kube-context: local
       values-file: k8s/values-local.yaml
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build.outputs.image-digest-ref }}
       job-name: migrate
       command: |
         /app/bin/migrate

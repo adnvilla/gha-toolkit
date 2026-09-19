@@ -104,6 +104,7 @@ Details worth knowing:
 | `replicaCount` | `1` | Number of pod replicas (rolling / canary stable) |
 | `image.repository` | `""` | Image repository (required) |
 | `image.tag` | `"latest"` | Image tag |
+| `image.digest` | `""` | Optional immutable digest; renders `repository@digest` and takes precedence over `tag` |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy |
 | `imagePullSecrets` | `[]` | List of `{ name: ... }` secrets for private registries |
 | `containerPort` | `8080` | Port the container listens on |
@@ -124,7 +125,7 @@ Details worth knowing:
 | `ingress.host` | `""` | Ingress host. `k8s-deploy.yml` / `k8s-canary.yml` / `k8s-bluegreen.yml` compose `{ingress-prefix}.{INGRESS_BASE_DOMAIN}` when both are set and this key is omitted from the values file |
 | `ingress.path` / `ingress.pathType` | `/` / `Prefix` | Ingress rule path |
 | `strategy.mode` | `rolling` | `rolling` \| `canary` \| `blueGreen` |
-| `canary.image.repository` / `tag` | `""` | Canary image (workflows set via `--set`) |
+| `canary.image.repository` / `tag` / `digest` | `""` | Canary image; digest takes precedence over tag |
 | `canary.replicas` | `1` | Canary Deployment replicas |
 | `canary.weight` | `10` | % traffic to canary when `trafficProvider=traefik` |
 | `canary.trafficProvider` | `none` | `none` \| `traefik` |
@@ -154,7 +155,7 @@ Details worth knowing:
 | `job.enabled` | `false` | Render the on-demand Job (`k8s-job.yml` sets this per run) |
 | `job.name` | `job` | Name segment of the Job and of its container |
 | `job.nameSuffix` | `""` | Extra suffix so repeat runs get distinct Job names |
-| `job.image.repository` / `tag` / `pullPolicy` | `""` | Falls back to the top-level `image` |
+| `job.image.repository` / `tag` / `digest` / `pullPolicy` | `""` | Falls back to the top-level `image`; digest takes precedence |
 | `job.command` / `job.args` | `[]` / `[]` | Container entrypoint / arguments |
 | `job.env` / `job.envFrom` | `[]` / `[]` | Appended to the top-level `env` / `envFrom` |
 | `job.resources` | `{}` | Falls back to the top-level `resources` |

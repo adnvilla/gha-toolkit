@@ -104,6 +104,60 @@ cat > "${GREEN_ACTIVE_VALUES}" <<'JSON'
 }
 JSON
 
+# Same topology as above, but the active slot is immutable. Abort must return this exact reference.
+GREEN_ACTIVE_DIGEST_VALUES="${WORK_DIR}/green-active-digest.json"
+cat > "${GREEN_ACTIVE_DIGEST_VALUES}" <<'JSON'
+{
+  "image": {
+    "repository": "registry.example.com/worker",
+    "digest": "sha256:active"
+  },
+  "blueGreen": {
+    "activeSlot": "green",
+    "blue": {
+      "replicas": 0,
+      "image": {
+        "repository": "registry.example.com/worker",
+        "tag": "v0"
+      }
+    },
+    "green": {
+      "replicas": 2,
+      "image": {
+        "repository": "registry.example.com/worker",
+        "digest": "sha256:active"
+      }
+    }
+  }
+}
+JSON
+
+GREEN_ACTIVE_REPOSITORY_ONLY_VALUES="${WORK_DIR}/green-active-repository-only.json"
+cat > "${GREEN_ACTIVE_REPOSITORY_ONLY_VALUES}" <<'JSON'
+{
+  "image": {
+    "repository": "registry.example.com/worker",
+    "digest": "sha256:stable"
+  },
+  "blueGreen": {
+    "activeSlot": "green",
+    "blue": {
+      "replicas": 0,
+      "image": {
+        "repository": "registry.example.com/worker",
+        "tag": "v0"
+      }
+    },
+    "green": {
+      "replicas": 2,
+      "image": {
+        "repository": "registry.example.com/green-worker"
+      }
+    }
+  }
+}
+JSON
+
 HELM_ARGS_FILE="${WORK_DIR}/helm-args.txt"
 HELM_CALLS_FILE="${WORK_DIR}/helm-calls.txt"
 HELM_COMMANDS_FILE="${WORK_DIR}/helm-commands.txt"
@@ -145,7 +199,7 @@ run_step() {
     HELM_CALLS_FILE="${HELM_CALLS_FILE}" \
     HELM_COMMANDS_FILE="${HELM_COMMANDS_FILE}" \
     FAKE_RELEASE_EXISTS=true \
-    FAKE_VALUES_FILE="${GREEN_ACTIVE_VALUES}" \
+    FAKE_VALUES_FILE="${LIVE_VALUES_FILE}" \
     FAKE_HTTP_STATUS="${FAKE_HTTP_STATUS:-200}" \
     GITHUB_OUTPUT="${STEP_OUTPUT}" \
     USE_LOCAL_CHART=true \
@@ -184,6 +238,7 @@ reset_env() {
   FAKE_HTTP_STATUS=200
   AUTO_ABORT=false
   OVERLAP_SECONDS=0
+  LIVE_VALUES_FILE="${GREEN_ACTIVE_VALUES}"
 }
 
 expect_success() {
@@ -213,6 +268,10 @@ expect_helm_set() {
 
 expect_no_helm_set() {
   ! grep -Fxq "$1" "${HELM_ARGS_FILE}" || fail "unexpected helm --set $1"
+}
+
+expect_no_helm_set_key() {
+  ! grep -Fq -- "$1=" "${HELM_ARGS_FILE}" || fail "unexpected helm --set key $1"
 }
 
 expect_helm_calls() {
@@ -279,6 +338,40 @@ expect_helm_set "blueGreen.activeSlot=green"
 expect_helm_set "blueGreen.blue.replicas=0"
 expect_helm_set "blueGreen.green.replicas=2"
 expect_step_output "active-slot=green"
+end_case
+
+reset_env
+begin_case "abort returns the active digest image when no image is supplied"
+LIVE_VALUES_FILE="${GREEN_ACTIVE_DIGEST_VALUES}"
+ACTION=abort
+run_step
+expect_success
+expect_step_output "image=registry.example.com/worker@sha256:active"
+expect_helm_set "blueGreen.blue.image.tag=v0"
+expect_no_helm_set_key "image.digest"
+expect_no_helm_set_key "blueGreen.blue.image.digest"
+expect_no_helm_set_key "blueGreen.green.image.digest"
+end_case
+
+reset_env
+begin_case "abort returns a usable tag for a repository-only active slot"
+LIVE_VALUES_FILE="${GREEN_ACTIVE_REPOSITORY_ONLY_VALUES}"
+ACTION=abort
+run_step
+expect_success
+expect_helm_set "image.repository=registry.example.com/green-worker"
+expect_helm_set "image.tag=latest"
+expect_step_output "image=registry.example.com/green-worker:latest"
+end_case
+
+reset_env
+begin_case "status returns a usable tag for a repository-only active slot"
+LIVE_VALUES_FILE="${GREEN_ACTIVE_REPOSITORY_ONLY_VALUES}"
+ACTION=status
+run_step
+expect_success
+expect_helm_calls 0
+expect_step_output "image=registry.example.com/green-worker:latest"
 end_case
 
 reset_env

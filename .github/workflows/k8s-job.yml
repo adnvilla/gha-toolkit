@@ -283,12 +283,25 @@ jobs:
           if [ -n "${IMAGE}" ]; then
             IMAGE_REPO="${IMAGE}"
             IMAGE_TAG="latest"
-            if [[ "${IMAGE}" == *:* ]]; then
+            IMAGE_DIGEST=""
+            if [[ "${IMAGE}" == *@* ]]; then
+              IMAGE_REPO="${IMAGE%@*}"
+              IMAGE_TAG=""
+              IMAGE_DIGEST="${IMAGE#*@}"
+            elif [[ "${IMAGE}" == *:* ]]; then
               IMAGE_REPO="${IMAGE%:*}"
               IMAGE_TAG="${IMAGE##*:}"
             fi
+            if [ "${USE_LOCAL_CHART}" == "true" ] && [ -n "${IMAGE_DIGEST}" ]; then
+              IMAGE_REPO="${IMAGE%:*}"
+              IMAGE_TAG="${IMAGE##*:}"
+              IMAGE_DIGEST=""
+            fi
             RENDER_ARGS+=(--set "image.repository=${IMAGE_REPO}")
             RENDER_ARGS+=(--set "image.tag=${IMAGE_TAG}")
+            if [ "${USE_LOCAL_CHART}" != "true" ]; then
+              RENDER_ARGS+=(--set "image.digest=${IMAGE_DIGEST}")
+            fi
           fi
 
           # command/args arrive as one argv entry per line; --set-json keeps entries with

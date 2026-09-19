@@ -60,6 +60,17 @@ expect_rendered_image() {
   fi
 }
 
+expect_chart_image() {
+  local description="$1"
+  local rendered="$2"
+  local expected="$3"
+  if ! grep -Fq "image: \"${expected}\"" <<< "${rendered}"; then
+    echo "FAIL: ${description} did not render image ${expected}"
+    printf '%s\n' "${rendered}" | sed 's/^/  | /'
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
 run_deploy() {
   local image="$1"
   local expected="$2"
@@ -172,6 +183,87 @@ run_case \
   "untagged reference without a registry port" \
   "registry.example.com/service" \
   "registry.example.com/service:latest"
+
+# A child image with a repository or tag is an explicit override. It must not inherit a top-level
+# digest, because doing so would render the child repository at the parent's immutable bytes.
+echo "-- tagged child images clear a top-level digest"
+canary_rendered="$(helm template child-digest-canary charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set strategy.mode=canary \
+  --set canary.image.repository=registry.example.com/canary \
+  --set canary.image.tag=v2)"
+expect_chart_image \
+  "canary tagged child override" \
+  "${canary_rendered}" \
+  "registry.example.com/canary:v2"
+
+canary_repository_only_rendered="$(helm template child-digest-canary-repository-only charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set strategy.mode=canary \
+  --set canary.image.repository=registry.example.com/canary)"
+expect_chart_image \
+  "canary repository-only child override keeps a usable tag" \
+  "${canary_repository_only_rendered}" \
+  "registry.example.com/canary:latest"
+
+bluegreen_rendered="$(helm template child-digest-bluegreen charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set strategy.mode=blueGreen \
+  --set blueGreen.blue.image.repository=registry.example.com/blue \
+  --set blueGreen.blue.image.tag=v2 \
+  --set blueGreen.green.image.repository=registry.example.com/green \
+  --set blueGreen.green.image.tag=v2)"
+expect_chart_image \
+  "blue-green tagged child override" \
+  "${bluegreen_rendered}" \
+  "registry.example.com/blue:v2"
+expect_chart_image \
+  "blue-green tagged child override" \
+  "${bluegreen_rendered}" \
+  "registry.example.com/green:v2"
+
+bluegreen_repository_only_rendered="$(helm template child-digest-bluegreen-repository-only charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set strategy.mode=blueGreen \
+  --set blueGreen.blue.image.repository=registry.example.com/blue \
+  --set blueGreen.green.image.repository=registry.example.com/green)"
+expect_chart_image \
+  "blue-green blue repository-only override keeps a usable tag" \
+  "${bluegreen_repository_only_rendered}" \
+  "registry.example.com/blue:latest"
+expect_chart_image \
+  "blue-green green repository-only override keeps a usable tag" \
+  "${bluegreen_repository_only_rendered}" \
+  "registry.example.com/green:latest"
+
+job_rendered="$(helm template child-digest-job charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set job.enabled=true \
+  --set job.name=work \
+  --set job.image.repository=registry.example.com/job \
+  --set job.image.tag=v2 \
+  --show-only templates/job.yaml)"
+expect_chart_image \
+  "job tagged child override" \
+  "${job_rendered}" \
+  "registry.example.com/job:v2"
+
+job_repository_only_rendered="$(helm template child-digest-job-repository-only charts/app \
+  --set image.repository=registry.example.com/stable \
+  --set image.digest=sha256:stable \
+  --set job.enabled=true \
+  --set job.name=work \
+  --set job.image.repository=registry.example.com/job \
+  --show-only templates/job.yaml)"
+expect_chart_image \
+  "job repository-only child override keeps a usable tag" \
+  "${job_repository_only_rendered}" \
+  "registry.example.com/job:latest"
 
 if [ "${FAILURES}" -ne 0 ]; then
   echo "${FAILURES} assertion(s) failed"
