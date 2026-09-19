@@ -213,7 +213,15 @@ jobs:
           REGISTRY_IMAGE: ${{ inputs.registry-host }}/${{ inputs.image-name }}
           SHORT_SHA: ${{ steps.tags.outputs.short-sha }}
         run: |
-          IMAGE_DIGEST_REF="$(docker image inspect --format='{{index .RepoDigests 0}}' "${REGISTRY_IMAGE}:${SHORT_SHA}")"
+          IMAGE_DIGEST_REF=""
+          while IFS= read -r candidate; do
+            case "${candidate}" in
+              "${REGISTRY_IMAGE}"@sha256:*)
+                IMAGE_DIGEST_REF="${candidate}"
+                break
+                ;;
+            esac
+          done < <(docker image inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${REGISTRY_IMAGE}:${SHORT_SHA}")
           if [[ "${IMAGE_DIGEST_REF}" != "${REGISTRY_IMAGE}@sha256:"* ]]; then
             echo "::error::Expected a sha256 RepoDigest for ${REGISTRY_IMAGE}:${SHORT_SHA}, got '${IMAGE_DIGEST_REF}'"
             exit 1

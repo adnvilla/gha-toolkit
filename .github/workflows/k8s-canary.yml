@@ -260,12 +260,20 @@ jobs:
           v = json.loads(os.environ.get("VALUES_JSON") or "{}") or {}
           img = v.get("image") or {}
           cimg = (v.get("canary") or {}).get("image") or {}
+          fallback_repo = img.get("repository") or ""
+          fallback_tag = img.get("tag") or ""
+          fallback_digest = img.get("digest") or ""
+          canary_repo = cimg.get("repository") or ""
+          canary_tag = cimg.get("tag") or ""
+          canary_digest = cimg.get("digest") or ""
+          if not (canary_repo or canary_tag or canary_digest):
+              canary_digest = fallback_digest
           print("CUR_REPO=%r" % (img.get("repository") or ""))
           print("CUR_TAG=%r" % (img.get("tag") or ""))
           print("CUR_DIGEST=%r" % (img.get("digest") or ""))
-          print("CUR_CANARY_REPO=%r" % (cimg.get("repository") or ""))
-          print("CUR_CANARY_TAG=%r" % (cimg.get("tag") or ""))
-          print("CUR_CANARY_DIGEST=%r" % (cimg.get("digest") or ""))
+          print("CUR_CANARY_REPO=%r" % (canary_repo or fallback_repo))
+          print("CUR_CANARY_TAG=%r" % (canary_tag or fallback_tag))
+          print("CUR_CANARY_DIGEST=%r" % canary_digest)
           PY
           )"
 

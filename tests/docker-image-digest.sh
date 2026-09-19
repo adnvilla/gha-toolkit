@@ -21,7 +21,9 @@ mkdir -p "${WORK_DIR}/bin"
 cat > "${WORK_DIR}/bin/docker" <<'SH'
 #!/usr/bin/env bash
 if [ "$1" = image ] && [ "$2" = inspect ]; then
-  printf '%s\n' 'registry.example.com/service@sha256:abcdef'
+  printf '%s\n' \
+    'registry.example.com/unrelated@sha256:deadbeef' \
+    'registry.example.com/service@sha256:abcdef'
   exit 0
 fi
 exit 64

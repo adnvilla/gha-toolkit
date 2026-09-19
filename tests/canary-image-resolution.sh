@@ -93,6 +93,21 @@ JSON
 VALUES_WITHOUT_IMAGE="${WORK_DIR}/values-without-image.json"
 echo '{"replicaCount": 2}' > "${VALUES_WITHOUT_IMAGE}"
 
+VALUES_WITH_DIGEST_ONLY_CANARY="${WORK_DIR}/values-with-digest-only-canary.json"
+cat > "${VALUES_WITH_DIGEST_ONLY_CANARY}" <<'JSON'
+{
+  "image": {
+    "repository": "registry.example.com/service",
+    "tag": "stable-sha"
+  },
+  "canary": {
+    "image": {
+      "digest": "sha256:canary"
+    }
+  }
+}
+JSON
+
 HELM_ARGS_FILE="${WORK_DIR}/helm-args.txt"
 HELM_CALLS_FILE="${WORK_DIR}/helm-calls.txt"
 KUBECTL_CALLS_FILE="${WORK_DIR}/kubectl-calls.txt"
@@ -216,6 +231,19 @@ expect_helm_set "canary.image.tag=canary-sha"
 expect_helm_set "canary.replicas=0"
 expect_helm_set "canary.weight=0"
 expect_step_output "image=registry.example.com/service:canary-sha"
+end_case
+
+begin_case "abort preserves a digest-only canary image from the current release"
+ACTION=abort
+IMAGE=""
+STABLE_IMAGE_INPUT=""
+FAKE_RELEASE_EXISTS=true
+FAKE_VALUES_FILE="${VALUES_WITH_DIGEST_ONLY_CANARY}"
+run_step
+expect_success
+expect_helm_set "canary.image.repository=registry.example.com/service"
+expect_helm_set "canary.image.digest=sha256:canary"
+expect_step_output "image=registry.example.com/service@sha256:canary"
 end_case
 
 begin_case "explicit stable-image wins over the current release"
