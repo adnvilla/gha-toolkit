@@ -37,6 +37,11 @@ resources:
     memory: "256Mi"
     cpu: "500m"
 
+# Raw pass-through security contexts. Defaults stay empty for compatibility with
+# existing images; set both blocks to meet Pod Security Standards `restricted`.
+podSecurityContext: {}
+securityContext: {}
+
 livenessProbe:
   httpGet:
     path: /
@@ -170,7 +175,8 @@ networkPolicy:
 
 # One-off Job (migration, backfill, seed). Off by default: k8s-job.yml turns it on for a
 # single run via --set. Anything not set here is inherited from the top-level values
-# (image, env, envFrom, resources, serviceAccount, imagePullSecrets, scheduling blocks).
+# (image, env, envFrom, resources, security contexts, serviceAccount, imagePullSecrets,
+# scheduling blocks).
 job:
   enabled: false
   # Optional ServiceAccount override; empty inherits the chart's serviceAccount resolution.
@@ -190,6 +196,8 @@ job:
   env: []
   envFrom: []
   resources: {} # defaults to the top-level resources
+  podSecurityContext: {} # defaults to the top-level podSecurityContext
+  securityContext: {} # defaults to the top-level securityContext
   restartPolicy: Never
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
@@ -216,6 +224,8 @@ migrations:
   env: []
   envFrom: []
   resources: {}
+  podSecurityContext: {}
+  securityContext: {}
   restartPolicy: Never
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
