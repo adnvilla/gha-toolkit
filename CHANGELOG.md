@@ -1,3 +1,25 @@
+## [2.1.0](https://github.com/adnvilla/gha-toolkit/compare/v2.0.1...v2.1.0) (2026-09-19)
+
+### 🚀 Features
+
+* add immutable image digest outputs ([6ead078](https://github.com/adnvilla/gha-toolkit/commit/6ead0782d8b5b0c1c8a167d615926d8df2243918))
+
+### 🐛 Bug Fixes
+
+* accept normalized Docker Hub digests ([2c8d28f](https://github.com/adnvilla/gha-toolkit/commit/2c8d28f909930481d2a8f565f5724a3e0ccf1223))
+* keep job image tag fallback ([104c75c](https://github.com/adnvilla/gha-toolkit/commit/104c75c2693a6cab6b4a04b444d55c6f9968e426))
+* keep rollout image tag fallback ([4c3b431](https://github.com/adnvilla/gha-toolkit/commit/4c3b43132708e276024247bb3b7fa4b9b1b3d40b))
+* omit digest keys for local charts ([146dd46](https://github.com/adnvilla/gha-toolkit/commit/146dd46cec7201245f66eb8f7a6f3d055cd0c289))
+* preserve blue-green slot digest overrides ([13b8b18](https://github.com/adnvilla/gha-toolkit/commit/13b8b188c416a6a06b7fa0426f918f3515053402))
+* preserve digest image fallbacks ([8a2a488](https://github.com/adnvilla/gha-toolkit/commit/8a2a488b19ee329af12e1ec55acfbf1174bdd334))
+* preserve digest image overrides ([ba5b925](https://github.com/adnvilla/gha-toolkit/commit/ba5b92589cf6b249691d3b83f5f431102d1173d3))
+* preserve local chart digest references ([a620093](https://github.com/adnvilla/gha-toolkit/commit/a620093ce4a7b1d4802e19124c8ce00130b5ce52))
+* preserve rollout image tag fallback ([e9df0c4](https://github.com/adnvilla/gha-toolkit/commit/e9df0c43d638a46f4186d40e2b0a56baf4ac6122))
+
+### 📚 Documentation
+
+* cover immutable image digest outputs ([da67dc5](https://github.com/adnvilla/gha-toolkit/commit/da67dc58d148074be7fc8bf2da4157ea3bd95b48))
+
 ## [2.0.1](https://github.com/adnvilla/gha-toolkit/compare/v2.0.0...v2.0.1) (2026-09-19)
 
 ### 🐛 Bug Fixes
