@@ -56,6 +56,26 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
+# Additional container lifecycle and probe configuration, passed through as-is.
+startupProbe: {}
+lifecycle: {}
+
+# Extra pod metadata and scheduling controls. Reserved app.kubernetes.io selector labels
+# are ignored from podLabels so Services keep selecting the intended workload.
+podAnnotations: {}
+podLabels: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+
+# Pod filesystem and sidecar configuration, passed through as-is.
+volumes: []
+volumeMounts: []
+initContainers: []
+extraContainers: []
+
+# terminationGracePeriodSeconds: 30
+# revisionHistoryLimit: 3
+
 # Raw pass-through blocks: set exactly what you'd put under a Pod spec.
 affinity: {}
 tolerations: []
@@ -85,6 +105,7 @@ ingress:
 # when using k8s-canary.yml / k8s-bluegreen.yml.
 strategy:
   mode: rolling # rolling | canary | blueGreen
+  rollingUpdate: {}
 
 # Canary settings (only used when strategy.mode=canary). The stable Deployment keeps
 # the rolling resource names/selectors; the canary Deployment/Service use a distinct
@@ -208,6 +229,10 @@ job:
   resources: {} # defaults to the top-level resources
   podSecurityContext: {} # defaults to the top-level podSecurityContext
   securityContext: {} # defaults to the top-level securityContext
+  # volumes: [] # defaults to the top-level volumes; set [] to disable inheritance
+  # volumeMounts: [] # defaults to the top-level volumeMounts; set [] to disable inheritance
+  # priorityClassName: "" # defaults to the top-level priorityClassName; set "" to disable inheritance
+  # terminationGracePeriodSeconds: 30 # defaults to the top-level value when set
   restartPolicy: Never
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
@@ -236,6 +261,10 @@ migrations:
   resources: {}
   podSecurityContext: {}
   securityContext: {}
+  # volumes: []
+  # volumeMounts: []
+  # priorityClassName: ""
+  # terminationGracePeriodSeconds: 30
   restartPolicy: Never
   backoffLimit: 0
   ttlSecondsAfterFinished: 300

@@ -122,6 +122,7 @@ helm template test-release charts/app \
 # Pod/container security contexts render in every workload mode, including batch overrides:
 bash tests/chart-security-contexts.sh
 bash tests/chart-ingress-tls.sh
+bash tests/chart-deployment-operability.sh
 # Canary + blueGreen modes (match ci.yml validate-chart extras):
 helm template test-release charts/app \
   --set image.repository=registry.example.local:5000/test-app --set image.tag=stable \

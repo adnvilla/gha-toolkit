@@ -163,6 +163,18 @@ Usage: include "app.job.podSpec" (dict "root" $ "job" $jobValues) | nindent <n>
 {{- $affinity := $job.affinity | default $root.Values.affinity -}}
 {{- $tolerations := $job.tolerations | default $root.Values.tolerations -}}
 {{- $nodeSelector := $job.nodeSelector | default $root.Values.nodeSelector -}}
+{{- $volumes := $root.Values.volumes -}}
+{{- if hasKey $job "volumes" -}}
+{{- $volumes = $job.volumes -}}
+{{- end -}}
+{{- $volumeMounts := $root.Values.volumeMounts -}}
+{{- if hasKey $job "volumeMounts" -}}
+{{- $volumeMounts = $job.volumeMounts -}}
+{{- end -}}
+{{- $priorityClassName := $root.Values.priorityClassName -}}
+{{- if hasKey $job "priorityClassName" -}}
+{{- $priorityClassName = $job.priorityClassName -}}
+{{- end -}}
 restartPolicy: {{ $job.restartPolicy | default "Never" }}
 {{- with $root.Values.imagePullSecrets }}
 imagePullSecrets:
@@ -185,8 +197,20 @@ tolerations:
 nodeSelector:
   {{- toYaml . | nindent 2 }}
 {{- end }}
+{{- with $priorityClassName }}
+priorityClassName: {{ . }}
+{{- end }}
+{{- if hasKey $job "terminationGracePeriodSeconds" }}
+terminationGracePeriodSeconds: {{ $job.terminationGracePeriodSeconds }}
+{{- else if hasKey $root.Values "terminationGracePeriodSeconds" }}
+terminationGracePeriodSeconds: {{ $root.Values.terminationGracePeriodSeconds }}
+{{- end }}
 {{- with $podSecurityContext }}
 securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with $volumes }}
+volumes:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 containers:
@@ -215,6 +239,10 @@ containers:
     {{- end }}
     {{- with $resources }}
     resources:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $volumeMounts }}
+    volumeMounts:
       {{- toYaml . | nindent 6 }}
     {{- end }}
 {{- end -}}
