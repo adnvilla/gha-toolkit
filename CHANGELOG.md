@@ -1,3 +1,13 @@
+## [2.3.0](https://github.com/adnvilla/gha-toolkit/compare/v2.2.0...v2.3.0) (2026-09-20)
+
+### 🚀 Features
+
+* add ingress TLS support ([34a5467](https://github.com/adnvilla/gha-toolkit/commit/34a54675fd8b200e094ccce4e07dd159dbdb1208))
+
+### 🐛 Bug Fixes
+
+* inherit ingress TLS annotations ([234f720](https://github.com/adnvilla/gha-toolkit/commit/234f72026329c0b940eb240f0838a42f23202230))
+
 ## [2.2.0](https://github.com/adnvilla/gha-toolkit/compare/v2.1.0...v2.2.0) (2026-09-19)
 
 ### 🚀 Features
