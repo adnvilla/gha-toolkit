@@ -109,4 +109,13 @@ expect_count "${rendered}" 'terminationGracePeriodSeconds: 30' 4
 expect_count "${rendered}" 'sizeLimit: 1Gi' 4
 expect_count "${rendered}" 'mountPath: /tmp' 4
 
+rendered="$(helm template test-release "${chart}" "${common[@]}" \
+  --set job.enabled=true \
+  --set-json 'job.volumes=[]' \
+  --set-json 'job.volumeMounts=[]' \
+  --set-string 'job.priorityClassName=')"
+expect_count "${rendered}" 'priorityClassName: platform-critical' 1
+expect_count "${rendered}" 'sizeLimit: 1Gi' 1
+expect_count "${rendered}" 'mountPath: /tmp' 1
+
 echo "chart deployment operability cases passed"

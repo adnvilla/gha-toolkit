@@ -230,7 +230,7 @@ Details worth knowing:
 | `job.env` / `job.envFrom` | `[]` / `[]` | Appended to the top-level `env` / `envFrom` |
 | `job.resources` | `{}` | Falls back to the top-level `resources` |
 | `job.podSecurityContext` / `job.securityContext` | `{}` | Each falls back to its top-level counterpart; an entry overrides the whole block |
-| `job.volumes` / `job.volumeMounts` / `job.priorityClassName` / `job.terminationGracePeriodSeconds` | `[]` / `[]` / `""` / unset | Each falls back to the top-level value; Jobs, migrations and CronJobs may override it |
+| `job.volumes` / `job.volumeMounts` / `job.priorityClassName` / `job.terminationGracePeriodSeconds` | unset | Each falls back to the top-level value; set `[]` or `""` to disable the first three, or an explicit value to override |
 | `job.restartPolicy` | `Never` | Pod restart policy |
 | `job.backoffLimit` | `0` | Job retries before it is marked failed |
 | `job.ttlSecondsAfterFinished` | `300` | Cluster-side cleanup delay after the Job finishes |

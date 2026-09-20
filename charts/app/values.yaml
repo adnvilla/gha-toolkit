@@ -229,9 +229,9 @@ job:
   resources: {} # defaults to the top-level resources
   podSecurityContext: {} # defaults to the top-level podSecurityContext
   securityContext: {} # defaults to the top-level securityContext
-  volumes: [] # defaults to the top-level volumes
-  volumeMounts: [] # defaults to the top-level volumeMounts
-  priorityClassName: "" # defaults to the top-level priorityClassName
+  # volumes: [] # defaults to the top-level volumes; set [] to disable inheritance
+  # volumeMounts: [] # defaults to the top-level volumeMounts; set [] to disable inheritance
+  # priorityClassName: "" # defaults to the top-level priorityClassName; set "" to disable inheritance
   # terminationGracePeriodSeconds: 30 # defaults to the top-level value when set
   restartPolicy: Never
   backoffLimit: 0
@@ -261,9 +261,9 @@ migrations:
   resources: {}
   podSecurityContext: {}
   securityContext: {}
-  volumes: []
-  volumeMounts: []
-  priorityClassName: ""
+  # volumes: []
+  # volumeMounts: []
+  # priorityClassName: ""
   # terminationGracePeriodSeconds: 30
   restartPolicy: Never
   backoffLimit: 0

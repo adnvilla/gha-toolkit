@@ -163,9 +163,18 @@ Usage: include "app.job.podSpec" (dict "root" $ "job" $jobValues) | nindent <n>
 {{- $affinity := $job.affinity | default $root.Values.affinity -}}
 {{- $tolerations := $job.tolerations | default $root.Values.tolerations -}}
 {{- $nodeSelector := $job.nodeSelector | default $root.Values.nodeSelector -}}
-{{- $volumes := $job.volumes | default $root.Values.volumes -}}
-{{- $volumeMounts := $job.volumeMounts | default $root.Values.volumeMounts -}}
-{{- $priorityClassName := $job.priorityClassName | default $root.Values.priorityClassName -}}
+{{- $volumes := $root.Values.volumes -}}
+{{- if hasKey $job "volumes" -}}
+{{- $volumes = $job.volumes -}}
+{{- end -}}
+{{- $volumeMounts := $root.Values.volumeMounts -}}
+{{- if hasKey $job "volumeMounts" -}}
+{{- $volumeMounts = $job.volumeMounts -}}
+{{- end -}}
+{{- $priorityClassName := $root.Values.priorityClassName -}}
+{{- if hasKey $job "priorityClassName" -}}
+{{- $priorityClassName = $job.priorityClassName -}}
+{{- end -}}
 restartPolicy: {{ $job.restartPolicy | default "Never" }}
 {{- with $root.Values.imagePullSecrets }}
 imagePullSecrets:
