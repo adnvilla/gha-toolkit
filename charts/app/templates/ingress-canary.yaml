@@ -2,6 +2,7 @@
 {{- if and (eq (include "app.strategyMode" .) "canary") .Values.canary.ingress.enabled (ne .Values.canary.trafficProvider "traefik") -}}
 {{- $host := include "app.canary.ingressHost" . -}}
 {{- $tls := mergeOverwrite (deepCopy .Values.ingress.tls) (.Values.canary.ingress.tls | default dict) -}}
+{{- $annotations := mergeOverwrite (deepCopy .Values.ingress.annotations) (.Values.canary.ingress.annotations | default dict) -}}
 {{- if $host }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -10,7 +11,7 @@ metadata:
   labels:
     {{- include "app.labels" . | nindent 4 }}
     app.kubernetes.io/track: canary
-  {{- with .Values.canary.ingress.annotations }}
+  {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}

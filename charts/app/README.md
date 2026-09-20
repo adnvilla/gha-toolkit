@@ -41,10 +41,13 @@ Secret is reused by the main, canary or preview Ingress, it must contain every h
 those Ingresses. Otherwise, each Ingress uses its own stable default (`<fullname>-tls`,
 `<fullname>-canary-tls`, or `<fullname>-preview-tls`).
 
-Canary and blue/green preview Ingresses inherit `ingress.tls`; their `tls` blocks can override
-individual fields. A Traefik weighted canary writes the same `secretName` to its `IngressRoute`.
-Set `canary.traefik.entryPoints` to the controller's TLS entry point (commonly `websecure`); the
-chart does not force an entry point because controller names differ between clusters.
+Canary and blue/green preview Ingresses inherit both `ingress.tls` and `ingress.annotations`; their
+own `tls` and `annotations` blocks override individual fields. This propagates a cert-manager issuer
+to the derived Ingresses that use their default Secrets. A Traefik weighted canary writes the same
+`secretName` to its `IngressRoute`, but Traefik `IngressRoute` is not handled by cert-manager's
+ingress-shim: TLS in that mode requires an explicitly named, pre-existing Secret. Set
+`canary.traefik.entryPoints` to the controller's TLS entry point (commonly `websecure`); the chart
+does not force an entry point because controller names differ between clusters.
 
 ## Deployment strategies
 

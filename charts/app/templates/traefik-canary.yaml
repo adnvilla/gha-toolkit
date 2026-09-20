@@ -1,5 +1,8 @@
 {{- /* Traefik weighted canary: TraefikService + IngressRoute (requires Traefik CRDs). */ -}}
 {{- if and (eq (include "app.strategyMode" .) "canary") (eq .Values.canary.trafficProvider "traefik") .Values.ingress.enabled .Values.ingress.host -}}
+{{- if and .Values.ingress.tls.enabled (not .Values.ingress.tls.secretName) -}}
+{{- fail "ingress.tls.secretName is required when TLS is enabled for a Traefik canary; IngressRoute does not create certificates" -}}
+{{- end -}}
 {{- $canaryWeight := int .Values.canary.weight -}}
 {{- if gt $canaryWeight 100 }}{{ $canaryWeight = 100 }}{{ end -}}
 {{- if lt $canaryWeight 0 }}{{ $canaryWeight = 0 }}{{ end -}}
