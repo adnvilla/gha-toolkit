@@ -1,3 +1,13 @@
+## [2.4.0](https://github.com/adnvilla/gha-toolkit/compare/v2.3.0...v2.4.0) (2026-09-20)
+
+### 🚀 Features
+
+* add deployment operability options ([e4ceee5](https://github.com/adnvilla/gha-toolkit/commit/e4ceee51e52f93439238c18e45d4b33eef7249a2))
+
+### 🐛 Bug Fixes
+
+* allow batch overrides to clear pod fields ([910b390](https://github.com/adnvilla/gha-toolkit/commit/910b390e0a0e17fa578d5650c65a35aa03fa71e0))
+
 ## [2.3.0](https://github.com/adnvilla/gha-toolkit/compare/v2.2.0...v2.3.0) (2026-09-20)
 
 ### 🚀 Features
