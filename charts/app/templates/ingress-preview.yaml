@@ -2,6 +2,8 @@
        Host defaults to preview.<ingress.host>. Default off. */ -}}
 {{- if and (eq (include "app.strategyMode" .) "blueGreen") .Values.blueGreen.preview.enabled .Values.blueGreen.preview.ingress.enabled -}}
 {{- $host := include "app.preview.ingressHost" . -}}
+{{- $tls := mergeOverwrite (deepCopy .Values.ingress.tls) (.Values.blueGreen.preview.ingress.tls | default dict) -}}
+{{- $annotations := mergeOverwrite (deepCopy .Values.ingress.annotations) (.Values.blueGreen.preview.ingress.annotations | default dict) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -9,13 +11,22 @@ metadata:
   labels:
     {{- include "app.labels" . | nindent 4 }}
     app.kubernetes.io/component: preview
-  {{- with .Values.blueGreen.preview.ingress.annotations }}
+  {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   {{- with (.Values.blueGreen.preview.ingress.className | default .Values.ingress.className) }}
   ingressClassName: {{ . }}
+  {{- end }}
+  {{- if $tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+        {{- range $tls.extraHosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ $tls.secretName | default (printf "%s-tls" (include "app.preview.fullname" .)) }}
   {{- end }}
   rules:
     - host: {{ $host | quote }}
