@@ -82,7 +82,8 @@ the mode on a new release name, or delete the old Deployment/Service first (same
 - The toolkit does **not** talk to Kafka. Use the same consumer `group.id` on both slots; prefer
   `overlapSeconds: 0` (scale up new → cut over → scale down old) unless handlers are idempotent
   under overlapping consumers.
-- Disable Ingress for workers (`ingress.enabled: false`). Override probes to TCP/exec as needed.
+- Disable Ingress for workers (`ingress.enabled: false`). Set `probes.enabled: false` for a process
+  without a health endpoint, or override the default HTTP probes with TCP/exec handlers.
 - For HTTP apps `ingress.enabled: true` now renders the Ingress in this mode too; it points at the
   main Service, so `promote` flips traffic with no Ingress change. Chart versions before 0.4.0
   rendered nothing for that combination.
@@ -161,14 +162,15 @@ Details worth knowing:
 | `image.digest` | `""` | Optional immutable digest; renders `repository@digest` and takes precedence over `tag` |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy |
 | `imagePullSecrets` | `[]` | List of `{ name: ... }` secrets for private registries |
-| `containerPort` | `8080` | Port the container listens on |
+| `containerPort` | `8080` | Port the container listens on; set `0` to omit the declared container port for a worker |
 | `env` | `[]` | List of `{ name, value }` env vars |
 | `envFrom` | `[]` | List of `envFrom` sources (`configMapRef`/`secretRef`), passed through as-is |
 | `resources` | 128Mi/100m requests, 256Mi/500m limits | Pod resource requests/limits |
 | `podSecurityContext` | `{}` | Pod-level security context, passed through as-is |
 | `securityContext` | `{}` | Container-level security context, passed through as-is |
-| `livenessProbe` | HTTP GET `/` on port `8080` | Passed through as-is — **not** derived from `containerPort` |
-| `readinessProbe` | HTTP GET `/` on port `8080` | Passed through as-is — **not** derived from `containerPort` |
+| `probes.enabled` | `true` | Set `false` to omit liveness, readiness and startup probes for a worker |
+| `livenessProbe` | HTTP GET `/` on named port `http` | Passed through as-is; the named port follows `containerPort` |
+| `readinessProbe` | HTTP GET `/` on named port `http` | Passed through as-is; the named port follows `containerPort` |
 | `startupProbe` / `lifecycle` | `{}` / `{}` | Container probe and lifecycle hooks, passed through as-is |
 | `podAnnotations` / `podLabels` | `{}` / `{}` | Extra pod metadata. Reserved `app.kubernetes.io` selector labels are ignored from `podLabels` |
 | `affinity` | `{}` | Passed through as-is to the pod spec |
@@ -260,9 +262,10 @@ avoiding a control-plane node — don't require chart changes, only a values ove
 Optional resources (`serviceAccount`, `autoscaling`, `podDisruptionBudget`, `networkPolicy`) default
 to off so existing consumers see no behavior change — enable them in your values file when needed.
 
-**Gotcha:** if you override `containerPort` (or `service.targetPort`), also override
-`livenessProbe`/`readinessProbe`'s `port` to match — they default to `8080` independently and are
-not derived from `containerPort`, since they're raw pass-through blocks.
+**Gotcha:** the default HTTP probes use the named container port `http`, so changing `containerPort`
+updates their target automatically. If you replace a probe with a numeric port, keep that port in sync
+yourself. The default path remains `/` for compatibility; set the probe path to the application's
+health endpoint when available.
 
 ## Zero-downtime rollout checklist
 

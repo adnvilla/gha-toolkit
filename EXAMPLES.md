@@ -304,19 +304,7 @@ env:
 service:
   targetPort: 3000
 
-# Probe ports don't inherit containerPort automatically — override them too
-livenessProbe:
-  httpGet:
-    path: /
-    port: 3000
-  initialDelaySeconds: 10
-  periodSeconds: 30
-readinessProbe:
-  httpGet:
-    path: /
-    port: 3000
-  initialDelaySeconds: 5
-  periodSeconds: 10
+# Default probes use the named `http` port, so they follow containerPort automatically.
 
 ingress:
   enabled: true
@@ -569,7 +557,7 @@ Typical flow: automatic `action=deploy` after CI → smoke on `canary.my-api.loc
 
 ## Example 13: Kafka Worker Blue/Green
 
-Blue/green for consumers. Disable Ingress; use TCP/exec probes if the process has no HTTP port.
+Blue/green for consumers. Disable Ingress and HTTP probes when the process has no health endpoint.
 Both slots must share the same Kafka `group.id`. Prefer `overlap-seconds: 0`.
 
 ```yaml
@@ -578,16 +566,9 @@ fullnameOverride: my-worker
 ingress:
   enabled: false
 replicaCount: 2
-livenessProbe:
-  exec:
-    command: ["pgrep", "-f", "my-worker"]
-  initialDelaySeconds: 10
-  periodSeconds: 30
-readinessProbe:
-  exec:
-    command: ["pgrep", "-f", "my-worker"]
-  initialDelaySeconds: 5
-  periodSeconds: 10
+containerPort: 0
+probes:
+  enabled: false
 env:
   - name: KAFKA_GROUP_ID
     value: my-worker

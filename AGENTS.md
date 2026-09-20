@@ -123,6 +123,7 @@ helm template test-release charts/app \
 bash tests/chart-security-contexts.sh
 bash tests/chart-ingress-tls.sh
 bash tests/chart-deployment-operability.sh
+bash tests/chart-probes.sh
 # Canary + blueGreen modes (match ci.yml validate-chart extras):
 helm template test-release charts/app \
   --set image.repository=registry.example.local:5000/test-app --set image.tag=stable \
@@ -302,8 +303,8 @@ Prefer adding a new optional input over changing the meaning of an existing one.
   **off**; keep it that way so existing consumers see no behavior change.
 - `probes`, `affinity`, `tolerations`, `resources`, `env`/`envFrom` are intentionally raw pass-through
   (`toYaml` from values). Don't add project-specific logic to templates — expose a values override.
-- Gotcha: `livenessProbe`/`readinessProbe` ports default to `8080` and are **not** derived from
-  `containerPort`. If you change one, keep the docs' warning about overriding the others.
+- Gotcha: default `livenessProbe`/`readinessProbe` ports use the named `http` container port, so they
+  follow `containerPort`. Preserve that behaviour unless a consumer explicitly selects a numeric port.
 - Manually bump `charts/app/Chart.yaml`'s `version` when a template change is consumer-visible (there is
   no automation for this).
 - Update the values table in `charts/app/README.md` for any value added/changed/removed.
