@@ -121,6 +121,9 @@ jobs:
       - name: Test chart Ingress TLS
         run: bash tests/chart-ingress-tls.sh
 
+      - name: Test chart Deployment operability options
+        run: bash tests/chart-deployment-operability.sh
+
       - name: Render chart in canary mode
         run: |
           helm template test-release charts/app \

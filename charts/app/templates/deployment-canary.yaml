@@ -14,12 +14,27 @@ metadata:
     app.kubernetes.io/track: canary
 spec:
   replicas: {{ .Values.canary.replicas }}
+  {{- if hasKey .Values "revisionHistoryLimit" }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  {{- end }}
+  {{- with .Values.strategy.rollingUpdate }}
+  strategy:
+    rollingUpdate:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "app.canary.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
+        {{- with omit (.Values.podLabels | default dict) "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/managed-by" "app.kubernetes.io/track" }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- include "app.canary.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -41,8 +56,26 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- if hasKey .Values "terminationGracePeriodSeconds" }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
@@ -71,6 +104,10 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
@@ -79,4 +116,15 @@ spec:
           readinessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 {{- end }}

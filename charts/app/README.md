@@ -169,9 +169,18 @@ Details worth knowing:
 | `securityContext` | `{}` | Container-level security context, passed through as-is |
 | `livenessProbe` | HTTP GET `/` on port `8080` | Passed through as-is — **not** derived from `containerPort` |
 | `readinessProbe` | HTTP GET `/` on port `8080` | Passed through as-is — **not** derived from `containerPort` |
+| `startupProbe` / `lifecycle` | `{}` / `{}` | Container probe and lifecycle hooks, passed through as-is |
+| `podAnnotations` / `podLabels` | `{}` / `{}` | Extra pod metadata. Reserved `app.kubernetes.io` selector labels are ignored from `podLabels` |
 | `affinity` | `{}` | Passed through as-is to the pod spec |
 | `tolerations` | `[]` | Passed through as-is to the pod spec |
 | `nodeSelector` | `{}` | Passed through as-is to the pod spec |
+| `topologySpreadConstraints` | `[]` | Pod topology spread constraints, passed through as-is |
+| `priorityClassName` | `""` | Pod priority class; empty omits the field |
+| `terminationGracePeriodSeconds` | Kubernetes default | Rendered when set; inherited by batch workloads unless overridden |
+| `volumes` / `volumeMounts` | `[]` / `[]` | Pod volumes and main-container mounts, passed through as-is |
+| `initContainers` / `extraContainers` | `[]` / `[]` | Pod init containers and additional sidecars, passed through as-is |
+| `revisionHistoryLimit` | Kubernetes default (`10`) | Deployment revision history; rendered when set, including `0` |
+| `strategy.rollingUpdate` | `{}` | `maxSurge` / `maxUnavailable` configuration for every Deployment mode |
 | `service.type` | `ClusterIP` | Service type |
 | `service.port` | `80` | Service port |
 | `service.targetPort` | `8080` | Port forwarded to the container |
@@ -221,6 +230,7 @@ Details worth knowing:
 | `job.env` / `job.envFrom` | `[]` / `[]` | Appended to the top-level `env` / `envFrom` |
 | `job.resources` | `{}` | Falls back to the top-level `resources` |
 | `job.podSecurityContext` / `job.securityContext` | `{}` | Each falls back to its top-level counterpart; an entry overrides the whole block |
+| `job.volumes` / `job.volumeMounts` / `job.priorityClassName` / `job.terminationGracePeriodSeconds` | `[]` / `[]` / `""` / unset | Each falls back to the top-level value; Jobs, migrations and CronJobs may override it |
 | `job.restartPolicy` | `Never` | Pod restart policy |
 | `job.backoffLimit` | `0` | Job retries before it is marked failed |
 | `job.ttlSecondsAfterFinished` | `300` | Cluster-side cleanup delay after the Job finishes |
@@ -242,7 +252,8 @@ Details worth knowing:
 | `cronJobs[].successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | `3` / `1` | Job history kept |
 | `cronJobs[].timeZone` / `startingDeadlineSeconds` | unset | Passed through when set |
 
-`probes`, `affinity`, `tolerations`, `resources` and `env`/`envFrom` are intentionally raw
+`probes`, `lifecycle`, `affinity`, `tolerations`, topology constraints, volumes, containers, `resources`
+and `env`/`envFrom` are intentionally raw
 pass-through blocks (`toYaml` straight from `values.yaml`) so project-specific quirks — like
 avoiding a control-plane node — don't require chart changes, only a values override.
 
@@ -252,6 +263,52 @@ to off so existing consumers see no behavior change — enable them in your valu
 **Gotcha:** if you override `containerPort` (or `service.targetPort`), also override
 `livenessProbe`/`readinessProbe`'s `port` to match — they default to `8080` independently and are
 not derived from `containerPort`, since they're raw pass-through blocks.
+
+## Zero-downtime rollout checklist
+
+For an HTTP service with more than one replica, configure a graceful shutdown, spread replicas across
+failure domains and give slow-starting processes a dedicated startup budget. All values remain opt-in:
+
+```yaml
+terminationGracePeriodSeconds: 30
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 5"]
+startupProbe:
+  httpGet:
+    path: /health/startup
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 5
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/instance: <release>
+strategy:
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+```
+
+`topologySpreadConstraints[].labelSelector` is a Kubernetes selector supplied from values, so it cannot
+call the chart helper. Set it to labels already present on the target Deployment's pod template (inspect
+`helm template` when using overrides or a canary/blue-green track). A `preStop` delay should be shorter
+than `terminationGracePeriodSeconds` and long enough for the ingress controller to stop routing traffic.
+
+When `securityContext.readOnlyRootFilesystem: true`, mount writable paths explicitly, for example:
+
+```yaml
+volumes:
+  - name: tmp
+    emptyDir: {}
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+```
 
 ## Versioning
 
