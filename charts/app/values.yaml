@@ -18,7 +18,7 @@ image:
 
 imagePullSecrets: []
 
-# Container port the app listens on.
+# Container port the app listens on. Set 0 for workers with no declared HTTP port.
 containerPort: 8080
 
 # List of { name, value } pairs injected as container env vars.
@@ -44,21 +44,28 @@ securityContext: {}
 
 livenessProbe:
   httpGet:
+    # Keep this path for compatibility; change it to the application's health endpoint.
     path: /
-    port: 8080
+    # The named container port follows containerPort without repeating its number.
+    port: http
   initialDelaySeconds: 10
   periodSeconds: 30
 
 readinessProbe:
   httpGet:
     path: /
-    port: 8080
+    port: http
   initialDelaySeconds: 5
   periodSeconds: 10
 
 # Additional container lifecycle and probe configuration, passed through as-is.
 startupProbe: {}
 lifecycle: {}
+
+# Set false for workers without HTTP/TCP/exec health checks. Configure individual
+# probes above with TCP or exec handlers when a process-specific check is available.
+probes:
+  enabled: true
 
 # Extra pod metadata and scheduling controls. Reserved app.kubernetes.io selector labels
 # are ignored from podLabels so Services keep selecting the intended workload.
