@@ -1,3 +1,9 @@
+## [2.5.1](https://github.com/adnvilla/gha-toolkit/compare/v2.5.0...v2.5.1) (2026-10-02)
+
+### 🐛 Bug Fixes
+
+* **release:** keep conventionalcommits preset on major 9 ([47e3af0](https://github.com/adnvilla/gha-toolkit/commit/47e3af052487ce918f48d06996f7ddb028e87f9b))
+
 ## [2.5.0](https://github.com/adnvilla/gha-toolkit/compare/v2.4.0...v2.5.0) (2026-10-02)
 
 ### 🚀 Features
