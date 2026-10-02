@@ -1,3 +1,9 @@
+## [2.5.2](https://github.com/adnvilla/gha-toolkit/compare/v2.5.1...v2.5.2) (2026-10-02)
+
+### 📚 Documentation
+
+* document setup-rust-toolchain v2 warning policy ([872651d](https://github.com/adnvilla/gha-toolkit/commit/872651d479520f5b0f019e52a2c2d0bace72737b))
+
 ## [2.5.1](https://github.com/adnvilla/gha-toolkit/compare/v2.5.0...v2.5.1) (2026-10-02)
 
 ### 🐛 Bug Fixes
