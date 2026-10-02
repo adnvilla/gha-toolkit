@@ -256,8 +256,8 @@ on:
 **Jobs:**
 
 1. **build:**
-   - `actions-rust-lang/setup-rust-toolchain@v1` with the requested toolchain/components and built-in
-     cargo caching (`cache: true`)
+   - `actions-rust-lang/setup-rust-toolchain` (v2, SHA-pinned) with the requested toolchain/components
+     and built-in cargo caching (`cache: true`)
    - Optionally starts PostgreSQL (see Design Decisions) and waits for `pg_isready`
    - Runs `cargo fmt --all --check`, `cargo clippy`, `cargo build` and `cargo test` — each gated by its
      `run-*` input; the test step exports `DATABASE_URL`
@@ -266,8 +266,12 @@ on:
 - PostgreSQL is started with a conditional `docker run` step instead of a `services:` container:
   GitHub Actions can't conditionally enable/disable a service container with an expression, so a
   docker-run step keeps the database truly *opt-in* (default off) within a single workflow file
-- Uses `actions-rust-lang/setup-rust-toolchain@v1` (semver-pinnable to `@v1`, unlike toolchain-tagged
-  actions) which bundles cargo caching, so no hand-rolled `actions/cache` step is needed
+- Uses `actions-rust-lang/setup-rust-toolchain` (v2, pinned to its commit SHA like every third-party
+  action) which bundles cargo caching, so no hand-rolled `actions/cache` step is needed
+- Warning policy: v2 no longer exports `RUSTFLAGS="-D warnings"`; it denies warnings through
+  `CARGO_BUILD_WARNINGS`, which only cargo 1.97+ honours. With `rust-version` older than 1.97,
+  `cargo build`/`cargo test` no longer fail on compiler warnings. `cargo clippy` is unaffected, since
+  the default `clippy-args` passes `-D warnings` explicitly
 
 ### docker-build-push.yml
 

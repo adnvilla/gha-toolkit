@@ -348,6 +348,11 @@ jobs:
       postgres-enabled: false      # Optional, default: false (set true for DB integration tests)
 ```
 
+Compiler warnings fail `cargo build`/`cargo test` only on Rust 1.97+ (the toolchain setup uses
+`CARGO_BUILD_WARNINGS`, which older cargo ignores). `cargo clippy` always runs with `-D warnings` by
+default. If you pin an older `rust-version` and want warnings to fail the build, add
+`[build] rustflags = ["-D", "warnings"]` to your repo's `.cargo/config.toml` or upgrade the toolchain.
+
 ### 11. Kubernetes Jobs and CronJobs (`k8s-job.yml`)
 
 One-off Jobs (migrations, backfills, seeds) and CronJob operations, rendered from the same
