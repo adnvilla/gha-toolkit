@@ -1,3 +1,9 @@
+## [2.5.0](https://github.com/adnvilla/gha-toolkit/compare/v2.4.0...v2.5.0) (2026-10-02)
+
+### 🚀 Features
+
+* improve chart probe configuration ([7f808ac](https://github.com/adnvilla/gha-toolkit/commit/7f808accbf052c3b0396a712acd5c5a9cdde8dbd))
+
 ## [2.4.0](https://github.com/adnvilla/gha-toolkit/compare/v2.3.0...v2.4.0) (2026-09-20)
 
 ### 🚀 Features
