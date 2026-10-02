@@ -70,12 +70,29 @@ for name, version in dependencies.items():
     if locked != version:
         raise SystemExit("package-lock must resolve %s to its exact manifest version" % name)
 
+conventionalcommits = dependencies["conventional-changelog-conventionalcommits"]
+if int(conventionalcommits.split(".")[0]) != 9:
+    raise SystemExit(
+        "conventional-changelog-conventionalcommits must stay on major 9: major 10 requires "
+        "conventional-changelog-writer@9, which @semantic-release/release-notes-generator@14 does not use"
+    )
+
 dependabot = yaml.safe_load(Path(".github/dependabot.yml").read_text(encoding="utf-8"))
 if not any(
     update.get("package-ecosystem") == "npm" and update.get("directory") == "/tools/release"
     for update in dependabot.get("updates", [])
 ):
     raise SystemExit("Dependabot must update /tools/release npm dependencies")
+release_updates = [
+    update for update in dependabot["updates"]
+    if update.get("package-ecosystem") == "npm" and update.get("directory") == "/tools/release"
+]
+if not any(
+    ignore.get("dependency-name") == "conventional-changelog-conventionalcommits"
+    for update in release_updates
+    for ignore in update.get("ignore", [])
+):
+    raise SystemExit("Dependabot must ignore conventional-changelog-conventionalcommits major 10+")
 PY
 
 echo "release toolchain is locked, script-free, and maintained by Dependabot"

@@ -444,6 +444,10 @@ Before considering a change complete:
   checking the notes of the release it produces. Paired with the
   `@semantic-release/release-notes-generator@^14` that `semantic-release@^25` pulls in, `^10` renders
   every section empty: the version bump is still correct, so nothing fails — you just get releases and
-  `CHANGELOG.md` entries with no content, which is how v1.4.0 through v1.6.2 shipped blank.
+  `CHANGELOG.md` entries with no content, which is how v1.4.0 through v1.6.2 shipped blank. From
+  10.4.0 on it fails loudly instead (`Missing helper: ... requires conventional-changelog-writer@9`),
+  since `release-notes-generator@14` still ships writer 8. `.github/dependabot.yml` ignores `>=10` and
+  `tests/release-toolchain.sh` enforces major 9; lift both only once `release-notes-generator@15` is
+  stable and `semantic-release` depends on it.
 - Markdown lint is warning-only in CI (`ci-complete` doesn't fail on it), but YAML, Actions semantics,
   chart, shell-logic, and doc-pin validation are hard gates — keep them green.
