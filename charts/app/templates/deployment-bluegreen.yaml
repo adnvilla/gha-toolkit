@@ -94,10 +94,12 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with $.Values.containerPort }}
           ports:
             - name: http
-              containerPort: {{ $.Values.containerPort }}
+              containerPort: {{ . }}
               protocol: TCP
+          {{- end }}
           env:
             - name: DEPLOYMENT_SLOT
               value: {{ $slot | quote }}
@@ -116,6 +118,7 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if $.Values.probes.enabled }}
           {{- with $.Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
@@ -127,6 +130,7 @@ spec:
           {{- with $.Values.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- end }}
           {{- with $.Values.volumeMounts }}
           volumeMounts:

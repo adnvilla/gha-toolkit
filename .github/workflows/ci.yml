@@ -124,6 +124,9 @@ jobs:
       - name: Test chart Deployment operability options
         run: bash tests/chart-deployment-operability.sh
 
+      - name: Test chart probes
+        run: bash tests/chart-probes.sh
+
       - name: Render chart in canary mode
         run: |
           helm template test-release charts/app \
