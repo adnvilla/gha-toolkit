@@ -1,3 +1,13 @@
+## [2.6.0](https://github.com/adnvilla/gha-toolkit/compare/v2.5.2...v2.6.0) (2026-10-07)
+
+### 🚀 Features
+
+* **k8s-canary:** verify live canary image before promote ([dee240d](https://github.com/adnvilla/gha-toolkit/commit/dee240d0f371b9c77c84367ceb8117a789c102d3))
+
+### 📚 Documentation
+
+* **k8s-canary:** require a caller lock for expected-canary-image ([0dc7f1a](https://github.com/adnvilla/gha-toolkit/commit/0dc7f1a7e4b4de8c3ebbcadbf9088c51c37d6d8d))
+
 ## [2.5.2](https://github.com/adnvilla/gha-toolkit/compare/v2.5.1...v2.5.2) (2026-10-02)
 
 ### 📚 Documentation
