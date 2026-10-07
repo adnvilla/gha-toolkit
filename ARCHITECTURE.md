@@ -434,11 +434,12 @@ canary), `promote` (canary → stable), `abort` (scale canary to 0). Uses `chart
 - Weighted traffic requires `canary.trafficProvider: traefik` in values (Traefik CRDs); default is
   smoke-host only (`canary.ingress`)
 - `expected-canary-image` closes the race between a caller resolving the canary image in an earlier
-  job and the promote itself: right before `helm upgrade`, inside the same job (so under the caller's
-  concurrency lock), the workflow reads the live canary Deployment by its labels
+  job and the promote itself: right before `helm upgrade`, inside the same job, the workflow reads the live canary Deployment by its labels
   (`app.kubernetes.io/instance=<release>`, `app.kubernetes.io/track=canary`, never a guessed name)
   and fails unless exactly one exists, it has replicas, and its first container image matches
-  exactly. Empty keeps the unchecked promote; dry-run skips the check
+  exactly. Empty keeps the unchecked promote; dry-run skips the check. It is only race-free when the
+  calling job holds a release-scoped `concurrency` lock; the reusable workflow does not declare one,
+  since that would queue or cancel runs for existing consumers
 
 ### k8s-bluegreen.yml
 

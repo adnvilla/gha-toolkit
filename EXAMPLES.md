@@ -557,10 +557,16 @@ Typical flow: automatic `action=deploy` after CI → smoke on `canary.my-api.loc
 
 If an earlier job resolves the image to promote from the running canary, pass it again as
 `expected-canary-image` so the promote fails before Helm when another run changed or scaled down
-the canary in between (the check runs inside the `canary` job, under its concurrency lock):
+the canary in between. The check runs inside the `canary` job, so that job must hold a
+release-scoped `concurrency` lock shared by every deploy/promote/abort run; without it another run
+can still change the canary between the check and `helm upgrade`. The reusable workflow does not
+declare one itself, so set it on the calling job:
 
 ```yaml
   canary:
+    concurrency:
+      group: my-api-production   # same group for deploy, promote and abort
+      cancel-in-progress: false
     uses: adnvilla/gha-toolkit/.github/workflows/k8s-canary.yml@master
     with:
       action: promote

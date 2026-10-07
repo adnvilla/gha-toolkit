@@ -74,7 +74,8 @@ on:
           Deployment (labels app.kubernetes.io/instance=<release-name> and
           app.kubernetes.io/track=canary) right before Helm, inside this job, and fails unless
           it exists, has at least one replica, and its first container image equals this
-          value exactly. Empty keeps the previous behaviour. Skipped on dry-run.
+          value exactly. Only race-free when the calling job holds a release-scoped
+          concurrency lock. Empty keeps the previous behaviour. Skipped on dry-run.
         required: false
         type: string
         default: ''

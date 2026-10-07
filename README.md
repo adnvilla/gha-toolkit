@@ -300,6 +300,10 @@ jobs:
       canary-weight: 10
 ```
 
+On `action=promote`, the optional `expected-canary-image` input re-reads the live canary Deployment
+right before Helm and fails if it is missing, scaled to 0, or running a different image. It only
+closes the race when the calling job holds a release-scoped `concurrency` lock (see Example 12).
+
 ### 9. Kubernetes Blue/Green Deploy (`k8s-bluegreen.yml`)
 
 Slot-based cutover for workers (e.g. Kafka consumers) **and HTTP APIs**: deploy the new image to
