@@ -68,6 +68,17 @@ on:
         required: false
         type: string
         default: ''
+      expected-canary-image:
+        description: >-
+          Optional guard for action=promote. When set, the workflow reads the live canary
+          Deployment (labels app.kubernetes.io/instance=<release-name> and
+          app.kubernetes.io/track=canary) right before Helm, inside this job, and fails unless
+          it exists, has at least one replica, and its first container image equals this
+          value exactly. Only race-free when the calling job holds a release-scoped
+          concurrency lock. Empty keeps the previous behaviour. Skipped on dry-run.
+        required: false
+        type: string
+        default: ''
       canary-weight:
         description: 'Traffic % to canary when canary.trafficProvider=traefik (0–100)'
         required: false
@@ -218,6 +229,7 @@ jobs:
           VALUES_FILE: ${{ inputs.values-file }}
           IMAGE: ${{ inputs.image }}
           STABLE_IMAGE_INPUT: ${{ inputs.stable-image }}
+          EXPECTED_CANARY_IMAGE: ${{ inputs.expected-canary-image }}
           ACTION: ${{ inputs.action }}
           CANARY_WEIGHT: ${{ inputs.canary-weight }}
           CANARY_REPLICAS: ${{ inputs.canary-replicas }}
@@ -433,9 +445,48 @@ jobs:
             RENDER_ARGS+=(--set "$kv")
           done <<< "${HELM_SET}"
 
+          if [ "${ACTION}" == "promote" ] && [ -n "${EXPECTED_CANARY_IMAGE}" ] && [ "${DRY_RUN}" == "true" ]; then
+            echo "::notice::dry-run: skipping expected-canary-image check (no cluster contact)"
+          fi
+
           if [ "${DRY_RUN}" == "true" ]; then
             helm template "${RELEASE_NAME}" "${CHART_DIR}" "${RENDER_ARGS[@]}"
           else
+            # Re-validate the live canary as late as possible: the caller's lock covers this
+            # job, so a canary changed by another run between resolution and promote is caught.
+            if [ "${ACTION}" == "promote" ] && [ -n "${EXPECTED_CANARY_IMAGE}" ]; then
+              CANARY_DEPLOY_JSON="$(
+                kubectl --context "${KUBE_CONTEXT}" get deploy -n "${NAMESPACE}" \
+                  -l "app.kubernetes.io/instance=${RELEASE_NAME},app.kubernetes.io/track=canary" \
+                  -o json
+              )"
+              CANARY_DEPLOY_JSON="${CANARY_DEPLOY_JSON}" python3 <<'PY'
+          import json, os, sys
+          expected = os.environ["EXPECTED_CANARY_IMAGE"]
+          items = (json.loads(os.environ.get("CANARY_DEPLOY_JSON") or "{}") or {}).get("items") or []
+          def fail(msg):
+              print("::error::expected-canary-image check failed: " + msg)
+              sys.exit(1)
+          if not items:
+              fail("no canary Deployment found for release '%s' in namespace '%s'"
+                   % (os.environ["RELEASE_NAME"], os.environ["NAMESPACE"]))
+          if len(items) > 1:
+              fail("found %d canary Deployments for release '%s'; expected exactly one"
+                   % (len(items), os.environ["RELEASE_NAME"]))
+          deploy = items[0]
+          name = (deploy.get("metadata") or {}).get("name") or "?"
+          spec = deploy.get("spec") or {}
+          replicas = spec.get("replicas", 1)
+          if not replicas:
+              fail("canary Deployment '%s' has 0 replicas" % name)
+          containers = ((spec.get("template") or {}).get("spec") or {}).get("containers") or []
+          live = (containers[0].get("image") if containers else "") or ""
+          if live != expected:
+              fail("canary Deployment '%s' runs '%s', expected '%s'" % (name, live, expected))
+          print("Canary Deployment '%s' matches expected image %s (%s replicas)" % (name, expected, replicas))
+          PY
+            fi
+
             ARGS=(
               upgrade --install "${RELEASE_NAME}" "${CHART_DIR}"
               "${RENDER_ARGS[@]}"
@@ -448,8 +499,10 @@ jobs:
             helm "${ARGS[@]}"
 
             if [ "${WAIT}" == "true" ] && [ "${ACTION}" == "deploy" ]; then
+              # Deployment metadata carries instance=<release>; only the pod template/selector
+              # uses instance=<release>-canary, so selecting on that would match nothing.
               kubectl --context "${KUBE_CONTEXT}" get deploy -n "${NAMESPACE}" \
-                -l "app.kubernetes.io/instance=${RELEASE_NAME}-canary,app.kubernetes.io/track=canary" \
+                -l "app.kubernetes.io/instance=${RELEASE_NAME},app.kubernetes.io/track=canary" \
                 -o name | while read -r d; do
                   [ -z "$d" ] && continue
                   kubectl --context "${KUBE_CONTEXT}" rollout status "$d" -n "${NAMESPACE}" --timeout="${TIMEOUT}"
