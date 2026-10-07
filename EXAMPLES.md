@@ -555,6 +555,20 @@ Typical flow: automatic `action=deploy` after CI → smoke on `canary.my-api.loc
 `workflow_dispatch` with `promote` (or `abort`). For Traefik weighted traffic, set
 `canary.trafficProvider: traefik` in values (cluster must have Traefik CRDs).
 
+If an earlier job resolves the image to promote from the running canary, pass it again as
+`expected-canary-image` so the promote fails before Helm when another run changed or scaled down
+the canary in between (the check runs inside the `canary` job, under its concurrency lock):
+
+```yaml
+  canary:
+    uses: adnvilla/gha-toolkit/.github/workflows/k8s-canary.yml@master
+    with:
+      action: promote
+      image: ${{ needs.resolve-promote-image.outputs.image }}
+      expected-canary-image: ${{ needs.resolve-promote-image.outputs.image }}
+      # ...same release-name / namespace / kube-context / values-file as above
+```
+
 ## Example 13: Kafka Worker Blue/Green
 
 Blue/green for consumers. Disable Ingress and HTTP probes when the process has no health endpoint.

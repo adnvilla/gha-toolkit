@@ -65,7 +65,21 @@ if [ "$1" = "--context" ]; then
   shift 2
 fi
 case "$1" in
-  get) ;;
+  get)
+    if [ "${*: -1}" = "name" ]; then
+      # Emulate the API server: the chart's canary Deployment *metadata* carries
+      # instance=<release> + track=canary (not the pod template's instance=<release>-canary),
+      # so only that exact selector returns it.
+      if [[ " $* " == *" -l app.kubernetes.io/instance=service,app.kubernetes.io/track=canary "* ]]; then
+        echo "deployment.apps/service-app-canary"
+      fi
+    elif [ -n "${FAKE_CANARY_DEPLOY_FILE:-}" ]; then
+      cat "${FAKE_CANARY_DEPLOY_FILE}"
+    fi
+    ;;
+  rollout)
+    [ "${FAKE_ROLLOUT_FAILS:-false}" != "true" ] || exit 1
+    ;;
   *)
     echo "unexpected kubectl invocation: $*" >&2
     exit 64
@@ -89,6 +103,25 @@ cat > "${VALUES_WITH_IMAGES}" <<'JSON'
   }
 }
 JSON
+
+# Live canary Deployment fixtures for the expected-canary-image promote guard.
+write_canary_deploy() {
+  local replicas="$1" image="$2"
+  cat <<JSON
+{"items": [{"metadata": {"name": "service-app-canary"},
+  "spec": {"replicas": ${replicas}, "template": {"spec": {"containers": [
+    {"name": "app", "image": "${image}"}, {"name": "sidecar", "image": "registry.example.com/proxy:1"}
+  ]}}}}]}
+JSON
+}
+CANARY_DEPLOY_MATCHING="${WORK_DIR}/canary-deploy-matching.json"
+write_canary_deploy 1 registry.example.com/service:canary-sha > "${CANARY_DEPLOY_MATCHING}"
+CANARY_DEPLOY_SCALED_DOWN="${WORK_DIR}/canary-deploy-scaled-down.json"
+write_canary_deploy 0 registry.example.com/service:canary-sha > "${CANARY_DEPLOY_SCALED_DOWN}"
+CANARY_DEPLOY_OTHER_IMAGE="${WORK_DIR}/canary-deploy-other-image.json"
+write_canary_deploy 1 registry.example.com/service:newer-sha > "${CANARY_DEPLOY_OTHER_IMAGE}"
+CANARY_DEPLOY_MISSING="${WORK_DIR}/canary-deploy-missing.json"
+echo '{"items": []}' > "${CANARY_DEPLOY_MISSING}"
 
 VALUES_WITHOUT_IMAGE="${WORK_DIR}/values-without-image.json"
 echo '{"replicaCount": 2}' > "${VALUES_WITHOUT_IMAGE}"
@@ -165,6 +198,9 @@ run_step() {
     KUBECTL_CALLS_FILE="${KUBECTL_CALLS_FILE}" \
     FAKE_RELEASE_EXISTS="${FAKE_RELEASE_EXISTS}" \
     FAKE_VALUES_FILE="${FAKE_VALUES_FILE}" \
+    FAKE_CANARY_DEPLOY_FILE="${FAKE_CANARY_DEPLOY_FILE:-}" \
+    FAKE_ROLLOUT_FAILS="${FAKE_ROLLOUT_FAILS:-false}" \
+    EXPECTED_CANARY_IMAGE="${EXPECTED_CANARY_IMAGE:-}" \
     GITHUB_OUTPUT="${STEP_OUTPUT}" \
     USE_LOCAL_CHART=true \
     CHART_PATH=charts/app \
@@ -180,7 +216,7 @@ run_step() {
     WAIT="${WAIT}" \
     ATOMIC=false \
     TIMEOUT=180s \
-    DRY_RUN=false \
+    DRY_RUN="${DRY_RUN:-false}" \
     KUBE_CONTEXT=test-context \
     bash "${STEP_SCRIPT}" > "${STEP_LOG}" 2>&1
   STEP_STATUS=$?
@@ -214,6 +250,12 @@ expect_no_helm_set_key() {
 
 expect_step_output() {
   grep -Fxq "$1" "${STEP_OUTPUT}" || fail "missing step output '$1'"
+}
+
+expect_failure_before_helm() {
+  [ "${STEP_STATUS}" -ne 0 ] || fail "step exited 0, expected a failure"
+  [ ! -s "${HELM_ARGS_FILE}" ] || fail "helm upgrade/template ran despite the failed check"
+  grep -Fq -- "$1" "${STEP_LOG}" || fail "step log does not mention '$1'"
 }
 
 expect_kubectl_call() {
@@ -313,7 +355,7 @@ expect_success
 expect_helm_set "image.tag=new-sha"
 end_case
 
-begin_case "the canary rollout lookup uses the explicit kube context"
+begin_case "deploy with wait selects the chart's canary Deployment and waits for its rollout"
 ACTION=deploy
 IMAGE=registry.example.com/service:new-sha
 STABLE_IMAGE_INPUT=""
@@ -322,8 +364,72 @@ FAKE_VALUES_FILE="${VALUES_WITH_IMAGES}"
 WAIT=true
 run_step
 expect_success
-expect_kubectl_call "--context test-context get deploy"
+expect_kubectl_call "--context test-context get deploy -n service -l app.kubernetes.io/instance=service,app.kubernetes.io/track=canary -o name"
+expect_kubectl_call "--context test-context rollout status deployment.apps/service-app-canary -n service --timeout=180s"
+end_case
+
+begin_case "deploy with wait fails the step when the canary rollout fails"
+FAKE_ROLLOUT_FAILS=true
+run_step
+[ "${STEP_STATUS}" -ne 0 ] || fail "step exited 0 despite a failed canary rollout"
+FAKE_ROLLOUT_FAILS=false
 WAIT=false
+end_case
+
+begin_case "promote without expected-canary-image does not inspect the live canary"
+ACTION=promote
+IMAGE=registry.example.com/service:canary-sha
+STABLE_IMAGE_INPUT=""
+FAKE_RELEASE_EXISTS=true
+FAKE_VALUES_FILE="${VALUES_WITH_IMAGES}"
+EXPECTED_CANARY_IMAGE=""
+FAKE_CANARY_DEPLOY_FILE="${CANARY_DEPLOY_MISSING}"
+run_step
+expect_success
+[ ! -s "${KUBECTL_CALLS_FILE}" ] || fail "kubectl was called without expected-canary-image"
+expect_helm_set "image.tag=canary-sha"
+expect_helm_set "canary.replicas=0"
+end_case
+
+begin_case "promote with a matching live canary proceeds to helm"
+EXPECTED_CANARY_IMAGE=registry.example.com/service:canary-sha
+FAKE_CANARY_DEPLOY_FILE="${CANARY_DEPLOY_MATCHING}"
+run_step
+expect_success
+expect_kubectl_call "--context test-context get deploy -n service -l app.kubernetes.io/instance=service,app.kubernetes.io/track=canary"
+expect_helm_set "image.tag=canary-sha"
+expect_helm_set "canary.replicas=0"
+end_case
+
+begin_case "promote fails before helm when the canary Deployment is missing"
+FAKE_CANARY_DEPLOY_FILE="${CANARY_DEPLOY_MISSING}"
+run_step
+expect_failure_before_helm "no canary Deployment found"
+end_case
+
+begin_case "promote fails before helm when the canary is scaled to 0"
+FAKE_CANARY_DEPLOY_FILE="${CANARY_DEPLOY_SCALED_DOWN}"
+run_step
+expect_failure_before_helm "has 0 replicas"
+end_case
+
+begin_case "promote fails before helm when the canary runs another image"
+FAKE_CANARY_DEPLOY_FILE="${CANARY_DEPLOY_OTHER_IMAGE}"
+run_step
+expect_failure_before_helm "runs 'registry.example.com/service:newer-sha'"
+end_case
+
+begin_case "promote dry-run skips the live canary check"
+FAKE_CANARY_DEPLOY_FILE="${CANARY_DEPLOY_MISSING}"
+DRY_RUN=true
+run_step
+# `helm template` never takes --kube-context, so expect_success's context check does not apply.
+[ "${STEP_STATUS}" -eq 0 ] || fail "step exited ${STEP_STATUS}, expected 0"
+grep -Fq "skipping expected-canary-image check" "${STEP_LOG}" || fail "missing dry-run skip notice"
+[ ! -s "${KUBECTL_CALLS_FILE}" ] || fail "kubectl was called on dry-run"
+DRY_RUN=false
+EXPECTED_CANARY_IMAGE=""
+FAKE_CANARY_DEPLOY_FILE=""
 end_case
 
 if [ "${FAILURES}" -ne 0 ]; then
