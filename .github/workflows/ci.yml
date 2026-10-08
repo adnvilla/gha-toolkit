@@ -127,6 +127,9 @@ jobs:
       - name: Test chart probes
         run: bash tests/chart-probes.sh
 
+      - name: Test numeric image tags
+        run: bash tests/numeric-image-tags.sh
+
       - name: Render chart in canary mode
         run: |
           helm template test-release charts/app \
