@@ -74,6 +74,17 @@ else
   grep -Fq "quote it in the values file" <<< "${output}" || fail "unexpected error: ${output}"
 fi
 
+echo "-- values-file integer beyond float64's exact range fails instead of being rounded"
+printf 'image:\n  repository: %s\n  tag: 9007199254740993\n' "${repo}" > "${WORK_DIR}/big.yaml"
+if output="$(helm template t "${chart}" -f "${WORK_DIR}/big.yaml" 2>&1)"; then
+  fail "render succeeded for an unquoted tag beyond 2^53"
+else
+  grep -Fq "quote it in the values file" <<< "${output}" || fail "unexpected error: ${output}"
+fi
+printf 'image:\n  repository: %s\n  tag: 9007199254740991\n' "${repo}" > "${WORK_DIR}/max.yaml"
+rendered="$(helm template t "${chart}" -f "${WORK_DIR}/max.yaml")"
+expect_images "${rendered}" "${repo}:9007199254740991" 1
+
 echo "-- k8s-* workflows never pass an image tag or digest with --set"
 if offenders="$(grep -nE -- '--set[[:space:]]+"?[A-Za-z.]*image\.(tag|digest)=' \
   .github/workflows/k8s-*.yml)"; then

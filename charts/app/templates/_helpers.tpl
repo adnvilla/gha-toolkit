@@ -282,16 +282,17 @@ completions: {{ $job.completions }}
 
 {{/*
 Image tag as a string. An all-digit short SHA (e.g. 9033178) arrives as int64 from --set and as
-float64 from a values file; printf "%s" would render either as "%!s(...)". Whole floats are
-converted back to their digits; any other float lost its original text in YAML parsing (1.10 ->
-1.1), so fail loudly instead of deploying the wrong tag. Quote numeric tags in values files.
+float64 from a values file; printf "%s" would render either as "%!s(...)". Whole floats inside
+float64's exact-integer range (< 2^53) are converted back to their digits; any other float may
+have lost its original text in YAML parsing (1.10 -> 1.1, 9007199254740993 -> ...992), so fail
+loudly instead of deploying the wrong tag. Quote numeric tags in values files.
 */}}
 {{- define "app.imageTag" -}}
 {{- $tag := . -}}
 {{- if kindIs "string" $tag -}}
 {{- $tag -}}
 {{- else if kindIs "float64" $tag -}}
-{{- if eq $tag (floor $tag) -}}
+{{- if and (eq $tag (floor $tag)) (ge $tag 0.0) (lt $tag 9007199254740992.0) -}}
 {{- int64 $tag -}}
 {{- else -}}
 {{- fail (printf "image tag %v was parsed as a number and lost its original text; quote it in the values file (tag: \"...\")" $tag) -}}
