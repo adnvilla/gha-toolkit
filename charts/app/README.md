@@ -158,7 +158,7 @@ Details worth knowing:
 | `fullnameOverride` | `""` | Override the fully computed release name |
 | `replicaCount` | `1` | Number of pod replicas (rolling / canary stable) |
 | `image.repository` | `""` | Image repository (required) |
-| `image.tag` | `"latest"` | Image tag |
+| `image.tag` | `"latest"` | Image tag. Quote numeric tags in values files (`tag: "9033178"`); whole numbers are rendered as their digits, other numbers fail the render |
 | `image.digest` | `""` | Optional immutable digest; renders `repository@digest` and takes precedence over `tag` |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy |
 | `imagePullSecrets` | `[]` | List of `{ name: ... }` secrets for private registries |

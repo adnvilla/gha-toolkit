@@ -368,16 +368,16 @@ jobs:
             -f "${VALUES_FILE}"
             --set "strategy.mode=canary"
             --set "image.repository=${STABLE_REPO}"
-            --set "image.tag=${STABLE_TAG}"
-            --set "image.digest=${STABLE_DIGEST}"
+            --set-string "image.tag=${STABLE_TAG}"
+            --set-string "image.digest=${STABLE_DIGEST}"
           )
 
           case "${ACTION}" in
             deploy)
               RENDER_ARGS+=(
                 --set "canary.image.repository=${CANARY_REPO}"
-                --set "canary.image.tag=${CANARY_TAG}"
-                --set "canary.image.digest=${CANARY_DIGEST}"
+                --set-string "canary.image.tag=${CANARY_TAG}"
+                --set-string "canary.image.digest=${CANARY_DIGEST}"
                 --set "canary.replicas=${CANARY_REPLICAS}"
                 --set "canary.weight=${CANARY_WEIGHT}"
               )
@@ -388,11 +388,11 @@ jobs:
               # Canary becomes the new stable; scale canary down and clear weight.
               RENDER_ARGS+=(
                 --set "image.repository=${CANARY_REPO}"
-                --set "image.tag=${CANARY_TAG}"
-                --set "image.digest=${CANARY_DIGEST}"
+                --set-string "image.tag=${CANARY_TAG}"
+                --set-string "image.digest=${CANARY_DIGEST}"
                 --set "canary.image.repository=${CANARY_REPO}"
-                --set "canary.image.tag=${CANARY_TAG}"
-                --set "canary.image.digest=${CANARY_DIGEST}"
+                --set-string "canary.image.tag=${CANARY_TAG}"
+                --set-string "canary.image.digest=${CANARY_DIGEST}"
                 --set "canary.replicas=0"
                 --set "canary.weight=0"
               )
@@ -413,8 +413,8 @@ jobs:
               fi
               RENDER_ARGS+=(
                 --set "canary.image.repository=${CANARY_REPO}"
-                --set "canary.image.tag=${CANARY_TAG}"
-                --set "canary.image.digest=${CANARY_DIGEST}"
+                --set-string "canary.image.tag=${CANARY_TAG}"
+                --set-string "canary.image.digest=${CANARY_DIGEST}"
                 --set "canary.replicas=0"
                 --set "canary.weight=0"
               )
@@ -431,7 +431,7 @@ jobs:
             for ((index = 0; index < ${#RENDER_ARGS[@]}; index++)); do
               arg="${RENDER_ARGS[index]}"
               next="${RENDER_ARGS[index + 1]:-}"
-              if [ "${arg}" = "--set" ] && [[ "${next}" == image.digest=* || "${next}" == canary.image.digest=* ]]; then
+              if [ "${arg}" = "--set-string" ] && [[ "${next}" == image.digest=* || "${next}" == canary.image.digest=* ]]; then
                 index=$((index + 1))
                 continue
               fi

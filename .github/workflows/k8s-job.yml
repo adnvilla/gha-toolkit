@@ -298,9 +298,9 @@ jobs:
               IMAGE_DIGEST=""
             fi
             RENDER_ARGS+=(--set "image.repository=${IMAGE_REPO}")
-            RENDER_ARGS+=(--set "image.tag=${IMAGE_TAG}")
+            RENDER_ARGS+=(--set-string "image.tag=${IMAGE_TAG}")
             if [ "${USE_LOCAL_CHART}" != "true" ]; then
-              RENDER_ARGS+=(--set "image.digest=${IMAGE_DIGEST}")
+              RENDER_ARGS+=(--set-string "image.digest=${IMAGE_DIGEST}")
             fi
           fi
 

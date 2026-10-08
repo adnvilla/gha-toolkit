@@ -52,6 +52,7 @@ tests/                   # Shell-logic tests: extract a workflow step's `run:` b
   bluegreen-slot-flip.sh      # k8s-bluegreen.yml slot flip, status, preview and verify/auto-abort
   k8s-job-run.sh              # k8s-job.yml render/wait/CronJob logic (all non-dry-run)
   chart-ingress-tls.sh        # TLS rendering for standard, canary, preview and Traefik Ingresses
+  numeric-image-tags.sh       # all-digit image tags render as digits; workflows pass tags as strings
   k8s-context-isolation.sh    # explicit Kubernetes context / no shared-kubeconfig mutation guard
   action-node24-versions.sh   # rejects action releases that still embed Node.js 20
   release-rules.sh            # releaseRules must release breaking changes as major
@@ -124,6 +125,8 @@ bash tests/chart-security-contexts.sh
 bash tests/chart-ingress-tls.sh
 bash tests/chart-deployment-operability.sh
 bash tests/chart-probes.sh
+# Numeric image tags (all-digit short SHAs) render as digits; k8s-* workflows use --set-string:
+bash tests/numeric-image-tags.sh
 # Canary + blueGreen modes (match ci.yml validate-chart extras):
 helm template test-release charts/app \
   --set image.repository=registry.example.local:5000/test-app --set image.tag=stable \
@@ -414,6 +417,11 @@ Before considering a change complete:
   `"${RELEASE_NAME}-${NAME}"` is wrong for a normal release. `k8s-job.yml` resolves a bare
   `cronjob-name` by listing `app.kubernetes.io/instance=<release>,app.kubernetes.io/component=cronjob`
   and matching the suffix, erroring on zero or multiple hits.
+- **Don't pass image tags or digests to Helm with `--set`.** `--set` turns an all-digit short SHA
+  (`9033178`, ~4% of commits) into an int64, and a values file turns it into a float64. The k8s
+  workflows use `--set-string` for every `*.image.tag` / `*.image.digest`, and the chart's
+  `app.imageTag` normalizes whatever still arrives as a number. `tests/numeric-image-tags.sh` guards
+  both (NAVI-28: v2.6.0 rendered `repo:%!s(int64=9033178)`).
 - **Don't use Helm's `default` for a numeric chart value where `0` is meaningful.** `default` treats
   `0` as empty, so `backoffLimit: 0` or `successfulJobsHistoryLimit: 0` would silently become the
   fallback. The batch templates use `hasKey` instead.
